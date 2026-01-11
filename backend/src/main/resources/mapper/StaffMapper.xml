@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="housekeeping.housekeepingnow.mapper.StaffMapper">
+    
+    <resultMap id="BaseResultMap" type="housekeeping.housekeepingnow.entity.Staff">
+        <id column="staff_id" property="staffId"/>
+        <result column="user_id" property="userId"/>
+        <result column="name" property="name"/>
+        <result column="gender" property="gender"/>
+        <result column="birth_date" property="birthDate"/>
+        <result column="origin" property="origin"/>
+        <result column="id_card" property="idCard"/>
+        <result column="avatar" property="avatar"/>
+        <result column="resume" property="resume"/>
+        <result column="work_experience" property="workExperience"/>
+        <result column="hourly_rate" property="hourlyRate"/>
+        <result column="rating" property="rating"/>
+        <result column="verification_status" property="verificationStatus"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+    
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT staff_id, user_id, name, gender, birth_date, origin, id_card, avatar, resume,
+               work_experience, hourly_rate, rating, verification_status, create_time, update_time
+        FROM staff
+        WHERE staff_id = #{staffId}
+    </select>
+    
+    <select id="selectByUserId" resultMap="BaseResultMap">
+        SELECT staff_id, user_id, name, gender, birth_date, origin, id_card, avatar, resume,
+               work_experience, hourly_rate, rating, verification_status, create_time, update_time
+        FROM staff
+        WHERE user_id = #{userId}
+    </select>
+    
+    <select id="selectList" resultMap="BaseResultMap">
+        SELECT staff_id, user_id, name, gender, birth_date, origin, id_card, avatar, resume,
+               work_experience, hourly_rate, rating, verification_status, create_time, update_time
+        FROM staff
+        <where>
+            <if test="gender != null">AND gender = #{gender}</if>
+            <if test="origin != null and origin != ''">AND origin LIKE CONCAT('%', #{origin}, '%')</if>
+            <if test="minRating != null">AND rating >= #{minRating}</if>
+            <if test="minWorkExperience != null">AND work_experience >= #{minWorkExperience}</if>
+            <if test="verificationStatus != null">AND verification_status = #{verificationStatus}</if>
+        </where>
+        ORDER BY rating DESC, work_experience DESC
+    </select>
+    
+    <insert id="insert" useGeneratedKeys="true" keyProperty="staffId">
+        INSERT INTO staff (user_id, name, gender, birth_date, origin, id_card, avatar, resume,
+                          work_experience, hourly_rate, rating, verification_status)
+        VALUES (#{userId}, #{name}, #{gender}, #{birthDate}, #{origin}, #{idCard}, #{avatar}, #{resume},
+                #{workExperience}, #{hourlyRate}, #{rating}, #{verificationStatus})
+    </insert>
+    
+    <update id="update">
+        UPDATE staff
+        <set>
+            <if test="name != null">name = #{name},</if>
+            <if test="gender != null">gender = #{gender},</if>
+            <if test="birthDate != null">birth_date = #{birthDate},</if>
+            <if test="origin != null">origin = #{origin},</if>
+            <if test="idCard != null">id_card = #{idCard},</if>
+            <if test="avatar != null">avatar = #{avatar},</if>
+            <if test="resume != null">resume = #{resume},</if>
+            <if test="workExperience != null">work_experience = #{workExperience},</if>
+            <if test="hourlyRate != null">hourly_rate = #{hourlyRate},</if>
+            <if test="rating != null">rating = #{rating},</if>
+            <if test="verificationStatus != null">verification_status = #{verificationStatus},</if>
+        </set>
+        WHERE staff_id = #{staffId}
+    </update>
+    
+    <update id="updateVerificationStatus">
+        UPDATE staff
+        SET verification_status = #{verificationStatus}
+        WHERE staff_id = #{staffId}
+    </update>
+    
+</mapper>
+

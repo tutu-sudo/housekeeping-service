@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="housekeeping.housekeepingnow.mapper.ReviewMapper">
+
+    <resultMap id="BaseResultMap" type="housekeeping.housekeepingnow.entity.Review">
+        <id column="review_id" property="reviewId"/>
+        <result column="appointment_id" property="appointmentId"/>
+        <result column="overall_rating" property="overallRating"/>
+        <result column="service_attitude_rating" property="serviceAttitudeRating"/>
+        <result column="professional_ability_rating" property="professionalAbilityRating"/>
+        <result column="service_quality_rating" property="serviceQualityRating"/>
+        <result column="review_content" property="reviewContent"/>
+        <result column="is_anonymous" property="isAnonymous"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT review_id, appointment_id, overall_rating, service_attitude_rating,
+               professional_ability_rating, service_quality_rating, review_content,
+               is_anonymous, create_time, update_time
+        FROM review
+        WHERE review_id = #{reviewId}
+    </select>
+
+    <select id="selectByAppointmentId" resultMap="BaseResultMap">
+        SELECT review_id, appointment_id, overall_rating, service_attitude_rating,
+               professional_ability_rating, service_quality_rating, review_content,
+               is_anonymous, create_time, update_time
+        FROM review
+        WHERE appointment_id = #{appointmentId, jdbcType=BIGINT}
+    </select>
+
+    <!-- 通过 appointment 关联 staff，查询某服务人员下的评价列表 -->
+    <select id="selectByStaffId" resultMap="BaseResultMap">
+        SELECT r.review_id, r.appointment_id, r.overall_rating, r.service_attitude_rating,
+               r.professional_ability_rating, r.service_quality_rating, r.review_content,
+               r.is_anonymous, r.create_time, r.update_time
+        FROM review r
+        JOIN appointment a ON r.appointment_id = a.appointment_id
+        WHERE a.staff_id = #{staffId}
+        ORDER BY r.create_time DESC
+    </select>
+
+    <!-- 通过 appointment 关联 customer，查询某顾客下的评价列表 -->
+    <select id="selectByCustomerId" resultMap="BaseResultMap">
+        SELECT r.review_id, r.appointment_id, r.overall_rating, r.service_attitude_rating,
+               r.professional_ability_rating, r.service_quality_rating, r.review_content,
+               r.is_anonymous, r.create_time, r.update_time
+        FROM review r
+        JOIN appointment a ON r.appointment_id = a.appointment_id
+        WHERE a.customer_id = #{customerId}
+        ORDER BY r.create_time DESC
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="reviewId">
+        INSERT INTO review (
+            appointment_id, overall_rating, service_attitude_rating,
+            professional_ability_rating, service_quality_rating,
+            review_content, is_anonymous
+        ) VALUES (
+            #{appointmentId, jdbcType=BIGINT}, #{overallRating, jdbcType=DECIMAL}, #{serviceAttitudeRating, jdbcType=DECIMAL},
+            #{professionalAbilityRating, jdbcType=DECIMAL}, #{serviceQualityRating, jdbcType=DECIMAL},
+            #{reviewContent, jdbcType=VARCHAR}, #{isAnonymous, jdbcType=TINYINT}
+        )
+    </insert>
+
+    <update id="update">
+        UPDATE review
+        <set>
+            <if test="overallRating != null">overall_rating = #{overallRating},</if>
+            <if test="serviceAttitudeRating != null">service_attitude_rating = #{serviceAttitudeRating},</if>
+            <if test="professionalAbilityRating != null">professional_ability_rating = #{professionalAbilityRating},</if>
+            <if test="serviceQualityRating != null">service_quality_rating = #{serviceQualityRating},</if>
+            <if test="reviewContent != null">review_content = #{reviewContent},</if>
+            <if test="isAnonymous != null">is_anonymous = #{isAnonymous},</if>
+        </set>
+        WHERE review_id = #{reviewId}
+    </update>
+
+    <select id="selectList" resultMap="BaseResultMap">
+        SELECT review_id, appointment_id, overall_rating, service_attitude_rating,
+               professional_ability_rating, service_quality_rating, review_content,
+               is_anonymous, create_time, update_time
+        FROM review r
+        <where>
+            <if test="staffId != null">
+                AND EXISTS (
+                    SELECT 1 FROM appointment a
+                    WHERE a.appointment_id = r.appointment_id
+                      AND a.staff_id = #{staffId}
+                )
+            </if>
+            <if test="appointmentId != null">AND r.appointment_id = #{appointmentId, jdbcType=BIGINT}</if>
+        </where>
+        ORDER BY create_time DESC
+    </select>
+
+</mapper>
+
+

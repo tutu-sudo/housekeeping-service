@@ -1,0 +1,154 @@
+spring:
+  application:
+    name: housekeeping-now
+  
+  # 数据源配置
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/housekeeping_service?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  
+  # Redis配置
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: 
+      database: 0
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+  
+  # 文件上传配置
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 50MB
+  
+  # 邮件配置
+  mail:
+    host: smtp.qq.com
+    port: 587
+    username: your-email@qq.com
+    password: your-email-password
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+
+# MyBatis配置
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: housekeeping.housekeepingnow.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# JWT配置
+jwt:
+  secret: housekeeping-now-secret-key-2024-please-change-in-production
+  expiration: 86400000 # 24小时，单位：毫秒
+  refresh-expiration: 604800000 # 7天，单位：毫秒
+
+# 支付配置
+payment:
+  # 支付宝配置（沙箱环境）
+  alipay:
+    app-id: 9021000159616281
+    private-key: MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCJ86k87UD3VdnRG1UE3aGGUfHUUCGs7nSjSmUk4w6F4M5Z/4Fzk+4CPOnVTyeIv1o8ZCHLRTekplpZW4ZoOiAwnJuISWzThGP5nSMowIdxIHo1gCM5ntUPhLcjFZ7uq/U4IsAPJY9SeqTa7b/1SOCrbUAmtHFEQdGC7aTSGwKsMouONlZHbcwxYK009SWyboPNje+44Fh84duiog4GM+ORSG4TNXzyBq30R7rvctBj6juY+6a1nii9g7MszF+KNLgq5G5AVv9ssxGRhBdQr+N3JistyhpNOnF5iXVMfOk318Ar7OIXPVqaRP9d4m6gMxl2KMlHpHqw9Vjq5GhFSCYXAgMBAAECggEAJoU/cJ/fUDFMzTMQnnc0r0kaeeqWPK+pKh+P9qjgWUnY1RCfmSJph35y3PlpVKn6DHr5ZMVDMFqzR9hiw5/XdTuFwpyeIsIJGJ5kPvDj4RbsiRvquiA75kVszgMvif3CT5aEgrY+Ow28EtXokBl1gujSzPv91M18L08kgva/3E0lY5z6HhU1BvPr0tLwk6hee4Qs1GGlvdXmI5xsVtOqXriw1RsS3CqgUaU1Tu2GhAVlRJNo+hV5d5s0WcDbebOJmbIyz7SIA9duWLoHOMgI9cYnFptHikX6Md9zKE4RB+DqkHNKKP0FWOVmvqKT2v8Z4Thq+spCXh3SV+GlsizswQKBgQDqIjxSNfTgRLkQcgBI6I4ol/7Oy8NxoCbBggeQRfWZKNB3fm7w4atd15dKQebErGENczOi1TSI/cgE57QRm9Y4IhRVsBJVGeCI9DA47WK1n4EPaC5KvzQQ7QZ7QOGN+Ps+7wrgLbPNudlS6KV+rQzF3aEjU52OIz/gGzLhmkbd2QKBgQCW1d5nvVLT6r0sMe9jGnCxjSZC/u2lHu6jXfOhWYHs0NcYWobB54s0aO+vdX7DkVGnUkHPbLd3KmBcViULlk7JQ5Hdjxoyy7IattajpoPvl/qnUPZuDqWtmk9QjqOs28qe4CMo90IPu0h7cJM+NeuPaJliM4UlLRHZbIn/tDN9bwKBgG+p1EsBIMC1Be4p8KjVALerhgLqe1P9pX40nZbZRsC9Dm9vBUos1qXy5FyuAXlbHQ5lGwNV27BaGML+HosnX4t19WzIhHXB2ax3iWgdDy6/27WVYj6T4ikQYj72OpyTWoAxUWaJZW+Aa313Jza7IZRclzVZ85KOjTA8yI+AHLxBAoGAbvkQtXBkNQfagF6IyngUe3zmrpnSjA6S8lzYN1icL3iDGCbaSGUrVLbzyTp/tjD/S0RIqOxKmwDxfl3eyYSfmJH/CmwTkVWuRttIVYTYQvmk716wv85E9NG4EwOuxim7DGLJW4V29A4NSMxNeJLBKXSCjO5swipDnJyvdxLEYz8CgYEAoltJ6chyVkfj3EdOxm5FqyO3B5vu2x9H+Gdl6FDBfhKiwrbZHiRxxeeSocTtMZoZH4Iyl0GM0//xnCfA/0tLjua9DjOSRw/OvQr0xdm7g7Tdw+UKZ9FyrUV2sQyoAEX1+okOukSCAV9+HIIpA+C7yS5zDQ5VhyrNT97Iyv2v7e0=
+    public-key: MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqWw8z8MZHpninCt878pe74UW7Q6dDycQ6DH6qBwrqGfc4fWI43j66+O1z4/R+5zq/xsxEwgqROQswlWmnwORvVaEhuZaGvCyp+p6FgN3ZtuQB9cm0HWhD8AcCWXY5nYdXliLVkIN85elpqUw973SeX9a8Od2bvqmhQjeYnlrT+LgoTnlaLcdm0qABrjYyDV3dZ7lSxJpYlUQRpqSDrHhrFWtZkdmR6NNd4dNNsFbIxU8HScJMhTQTUKhcLhJ4HYCye5V6tKv6ntWOKbLzF43wj6AACc98RZUSeKrmGK8He7UU/f2u3lJ3nPIA15s7c7WjsMZz3XhY1SxWm6o97g+awIDAQAB
+    gateway-url: https://openapi-sandbox.dl.alipaydev.com/gateway.do
+    notify-url: http://n22a6889.natappfree.cc/api/payment/alipay/notify
+    return-url: http://n22a6889.natappfree.cc/api/payment/alipay/return
+    # 沙箱买家UID（用于测试）
+    sandbox-buyer-id: 2088721092619762
+  
+  # 微信支付配置
+  wechat:
+    app-id: your-wechat-app-id
+    mch-id: your-wechat-mch-id
+    api-v3-key: your-wechat-api-v3-key
+    cert-path: classpath:cert/wechat/apiclient_cert.pem
+    private-key-path: classpath:cert/wechat/apiclient_key.pem
+    notify-url: http://your-domain.com/api/payment/wechat/notify
+
+# 文件存储配置
+file:
+  upload:
+    path: D:/housekeeping-uploads/
+    url-prefix: http://localhost:8080/uploads/
+  certificate:
+    path: D:/housekeeping-uploads/certificates/
+    allowed-types: pdf,jpg,jpeg,png
+
+# 短信服务配置
+sms:
+  provider: aliyun # aliyun, tencent
+  aliyun:
+    access-key-id: your-aliyun-access-key-id
+    access-key-secret: your-aliyun-access-key-secret
+    sign-name: 家政服务
+    template-code: SMS_123456789
+  tencent:
+    secret-id: your-tencent-secret-id
+    secret-key: your-tencent-secret-key
+    app-id: your-tencent-app-id
+    sign-name: 家政服务
+
+# Swagger配置
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    tags-sorter: alpha
+    operations-sorter: alpha
+  info:
+    title: 家政服务预约平台API文档
+    description: 家政服务预约平台接口文档
+    version: 1.0.0
+    contact:
+      name: 开发团队
+      email: dev@housekeeping.com
+
+# 日志配置
+logging:
+  level:
+    root: INFO
+    housekeeping.housekeepingnow: DEBUG
+    org.springframework.web: INFO
+    org.mybatis: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{50} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{50} - %msg%n"
+  file:
+    name: logs/housekeeping-now.log
+    max-size: 10MB
+    max-history: 30
+
+# 服务器配置
+server:
+  port: 8080
+  servlet:
+    context-path: /
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
