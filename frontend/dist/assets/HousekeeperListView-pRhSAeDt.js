@@ -1,1 +1,0 @@
-import{N as s}from"./Navigation-B8hgeOvh.js";import{_ as t,c as o,o as a,a as r,f as c}from"./index-DllpCzq3.js";const i={class:"housekeeper-list-view"},n={__name:"HousekeeperListView",setup(_){return(p,e)=>(a(),o("div",i,[r(s),e[0]||(e[0]=c("div",{class:"content"},null,-1))]))}},u=t(n,[["__scopeId","data-v-240e3080"]]);export{u as default};

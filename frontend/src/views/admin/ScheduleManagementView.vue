@@ -89,7 +89,8 @@
             width="600px"
             @close="resetForm"
           >
-            <el-form :model="form" :rules="rules" ref="formRef" label-width="120px">
+            <div v-loading="loadingDetail">
+              <el-form :model="form" :rules="rules" ref="formRef" label-width="120px">
               <el-form-item label="服务人员ID" prop="staffId">
                 <el-input-number
                   v-model="form.staffId"
@@ -133,6 +134,7 @@
                 </el-radio-group>
               </el-form-item>
             </el-form>
+            </div>
             <template #footer>
               <el-button @click="dialogVisible = false">取消</el-button>
               <el-button type="primary" @click="handleSubmit" :loading="submitting">
@@ -153,7 +155,8 @@ import {
   getSchedules,
   createSchedule,
   updateSchedule,
-  deleteSchedule
+  deleteSchedule,
+  getScheduleDetail
 } from '@/api/admin'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import Navigation from '@/components/common/Navigation.vue'
@@ -166,6 +169,7 @@ const dialogVisible = ref(false)
 const formRef = ref(null)
 const isEdit = ref(false)
 const currentId = ref(null)
+const loadingDetail = ref(false)
 
 const filters = ref({
   staffId: undefined,
@@ -230,17 +234,36 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = async (row) => {
   isEdit.value = true
   currentId.value = row.scheduleId
-  form.value = {
-    staffId: row.staffId,
-    workDate: row.workDate || '',
-    startTime: row.startTime || '',
-    endTime: row.endTime || '',
-    availableStatus: row.availableStatus !== undefined ? row.availableStatus : 1
-  }
+  loadingDetail.value = true
   dialogVisible.value = true
+  
+  try {
+    // 使用详情接口获取最新数据
+    const response = await getScheduleDetail(row.scheduleId)
+    const detail = response.data?.data || response.data
+    form.value = {
+      staffId: detail.staffId,
+      workDate: detail.workDate || '',
+      startTime: detail.startTime || '',
+      endTime: detail.endTime || '',
+      availableStatus: detail.availableStatus !== undefined ? detail.availableStatus : 1
+    }
+  } catch (error) {
+    console.error('获取排班详情失败，使用列表数据:', error)
+    // 如果获取详情失败，使用列表数据作为备用
+    form.value = {
+      staffId: row.staffId,
+      workDate: row.workDate || '',
+      startTime: row.startTime || '',
+      endTime: row.endTime || '',
+      availableStatus: row.availableStatus !== undefined ? row.availableStatus : 1
+    }
+  } finally {
+    loadingDetail.value = false
+  }
 }
 
 const handleDelete = async (row) => {
@@ -310,11 +333,11 @@ onMounted(() => {
 <style scoped lang="scss">
 .schedule-management-view {
   min-height: 100vh;
-  background-color: #f0f2f5;
+  background-color: #f5f7fa;
 }
 
 .content {
-  padding: 20px;
+  padding: 0;
 }
 
 .page-header {

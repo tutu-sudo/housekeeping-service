@@ -1,4 +1,5 @@
 import { login, register, refreshToken } from '@/api/auth'
+import { getUserInfo as apiGetUserProfile } from '@/api/user'
 import { getToken, setToken, getUserInfo, setUserInfo, clearAuth } from '@/utils/auth'
 
 const state = {
@@ -124,6 +125,22 @@ const actions = {
           email: rawUserInfo.email || data.email,
           ...rawUserInfo
         }
+
+        // 尝试从新的 /api/users/{userId} 接口获取最新的用户资料（头像/手机号/邮箱等）
+        try {
+          if (userId) {
+            const profileRes = await apiGetUserProfile(userId)
+            const profileData = profileRes.data?.data || profileRes.data || {}
+            Object.assign(userInfo, {
+              avatar: profileData.avatar ?? userInfo.avatar,
+              phone: profileData.phone ?? userInfo.phone,
+              email: profileData.email ?? userInfo.email,
+              username: profileData.username ?? userInfo.username
+            })
+          }
+        } catch (e) {
+          // 如果拉取失败，不影响登录流程，继续使用登录接口返回的数据
+        }
         
         if (import.meta.env.DEV) {
           console.log('登录响应 - 最终userInfo:', userInfo)
@@ -237,9 +254,15 @@ const actions = {
     commit('CLEAR_AUTH')
   },
 
-  // 更新用户信息
-  updateUserInfo({ commit }, userInfo) {
-    commit('SET_USER_INFO', userInfo)
+  // 更新用户信息（例如个人中心修改资料/头像）
+  // 这里只接收部分字段，需要与当前的 userInfo 做合并，避免丢失 id / role 等关键字段
+  updateUserInfo({ commit, state }, payload) {
+    const current = state.userInfo || {}
+    const merged = {
+      ...current,
+      ...payload
+    }
+    commit('SET_USER_INFO', merged)
   }
 }
 

@@ -169,10 +169,22 @@ const services = ref([
   }
 ])
 
+// 服务类别到分类索引的映射
+const serviceCategoryMap = {
+  '基础家务服务': 0,
+  '专业保洁与养护服务': 1,
+  '母婴护理服务': 2,
+  '养老护理服务': 3,
+  '家电维修与维护服务': 4,
+  '特色专项服务': 5
+}
+
 const handleServiceClick = (service) => {
+  // 跳转到产品服务页面，并滚动到对应的分类
+  const categoryIndex = serviceCategoryMap[service.title] ?? 0
   router.push({
     path: '/housekeepers',
-    query: { serviceTypeId: service.id }
+    query: { category: categoryIndex }
   })
 }
 </script>

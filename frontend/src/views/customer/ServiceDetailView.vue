@@ -1,7 +1,7 @@
 <template>
   <div class="service-detail-view">
     <Navigation />
-    <div class="content">
+    <div class="content" v-loading="loading">
       <!-- 面包屑导航 -->
       <div class="breadcrumb-section">
         <el-breadcrumb separator=">">
@@ -93,7 +93,7 @@
                     按天结算，不满一天按一天计算
                   </el-descriptions-item>
                   <el-descriptions-item label="服务次数" v-if="serviceInfo?.billingType === 'times'">
-                    按次结算，一次多少钱
+                    按次结算
                   </el-descriptions-item>
                 </el-descriptions>
               </div>
@@ -155,7 +155,7 @@ import {
   CircleCheckFilled
 } from '@element-plus/icons-vue'
 import Navigation from '@/components/common/Navigation.vue'
-import { serviceDetailsData } from '@/data/serviceDetails'
+import { getServiceDetail } from '@/api/services'
 import {
   Brush,
   Tools,
@@ -196,16 +196,17 @@ const router = useRouter()
 
 const activeTab = ref('details')
 const serviceImagePlaceholder = '/images/service-placeholder.jpg'
+const loading = ref(false)
+const serviceInfo = ref(null)
 
-// 获取服务名称（从路由参数）
-const serviceName = computed(() => {
-  return route.params.serviceName || route.query.serviceName || ''
+// 获取服务ID（从路由参数，优先使用 serviceId）
+const serviceId = computed(() => {
+  return route.query.serviceId || route.params.serviceId || null
 })
 
-// 获取服务详情
-const serviceInfo = computed(() => {
-  if (!serviceName.value) return null
-  return serviceDetailsData[serviceName.value] || null
+// 获取服务名称（从路由参数，作为备用）
+const serviceName = computed(() => {
+  return route.query.serviceName || route.params.serviceName || ''
 })
 
 // 获取结算方式文本
@@ -246,32 +247,88 @@ const defaultGuarantees = [
   }
 ]
 
-// 处理预约
-const handleAppointment = () => {
-  if (!serviceName.value) {
-    ElMessage.warning('服务信息不完整')
-    return
-  }
-
-  // 跳转到预约页面，传递服务名称
-  router.push({
-    path: '/appointment',
-    query: {
-      serviceName: serviceName.value
-    }
-  })
-}
-
-onMounted(() => {
-  if (!serviceName.value) {
+// 加载服务详情
+const loadServiceDetail = async () => {
+  if (!serviceId.value) {
     ElMessage.error('服务信息不存在')
     router.push('/housekeepers')
     return
   }
 
-  if (!serviceInfo.value) {
-    ElMessage.warning('该服务详情暂未完善')
+  loading.value = true
+  try {
+    const response = await getServiceDetail(serviceId.value)
+    const data = response.data?.data || response.data
+    
+    if (!data) {
+      ElMessage.error('服务详情不存在')
+      router.push('/housekeepers')
+      return
+    }
+
+    // 映射后端数据到前端显示格式
+    serviceInfo.value = {
+      // 基本信息
+      serviceId: data.serviceId || data.service_id,
+      name: data.serviceName || data.service_name || serviceName.value,
+      title: data.serviceName || data.service_name || serviceName.value,
+      description: data.description,
+      mainCategory: data.mainCategory || data.main_category,
+      
+      // 图片
+      image: data.imageUrl || data.image_url || serviceImagePlaceholder,
+      
+      // 价格和时长
+      price: data.price ? `¥${data.price}` : '面议',
+      estimatedDuration: data.estimatedDuration || data.estimated_duration || 1,
+      duration: data.estimatedDuration || data.estimated_duration || 4,
+      
+      // 结算方式（默认按小时）
+      billingType: 'hourly',
+      
+      // 适用范围
+      applicableScope: data.description || '专业的家政服务，为您提供优质的服务体验。',
+      
+      // 服务统计
+      servedCount: data.servedCount || '36740',
+      
+      // 服务内容（使用描述）
+      content: data.description ? `<p>${data.description}</p>` : null,
+      
+      // 可用状态
+      availableStatus: data.availableStatus || data.available_status
+    }
+    
+    console.log('成功加载服务详情:', serviceInfo.value)
+  } catch (error) {
+    console.error('获取服务详情失败:', error)
+    const errorMessage = error.response?.data?.message || error.message || '获取服务详情失败'
+    ElMessage.error(errorMessage)
+    router.push('/housekeepers')
+  } finally {
+    loading.value = false
   }
+}
+
+// 处理预约
+const handleAppointment = () => {
+  if (!serviceInfo.value) {
+    ElMessage.warning('服务信息不完整')
+    return
+  }
+
+  // 跳转到预约页面，传递服务ID和名称
+  router.push({
+    path: '/appointment',
+    query: {
+      serviceId: serviceInfo.value.serviceId,
+      serviceName: serviceInfo.value.name
+    }
+  })
+}
+
+onMounted(() => {
+  loadServiceDetail()
 })
 </script>
 

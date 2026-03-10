@@ -43,7 +43,8 @@
             width="600px"
             @close="resetForm"
           >
-            <el-form :model="form" :rules="rules" ref="formRef" label-width="120px">
+            <div v-loading="loadingDetail">
+              <el-form :model="form" :rules="rules" ref="formRef" label-width="120px">
               <el-form-item label="公司名称" prop="companyName">
                 <el-input v-model="form.companyName" placeholder="请输入公司名称" />
               </el-form-item>
@@ -73,6 +74,7 @@
                 />
               </el-form-item>
             </el-form>
+            </div>
             <template #footer>
               <el-button @click="dialogVisible = false">取消</el-button>
               <el-button type="primary" @click="handleSubmit" :loading="submitting">
@@ -93,7 +95,8 @@ import {
   getCompanies,
   createCompany,
   updateCompany,
-  deleteCompany
+  deleteCompany,
+  getCompanyDetail
 } from '@/api/admin'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import Navigation from '@/components/common/Navigation.vue'
@@ -106,6 +109,7 @@ const dialogVisible = ref(false)
 const formRef = ref(null)
 const isEdit = ref(false)
 const currentId = ref(null)
+const loadingDetail = ref(false)
 
 const form = ref({
   companyName: '',
@@ -143,18 +147,38 @@ const handleAdd = () => {
   dialogVisible.value = true
 }
 
-const handleEdit = (row) => {
+const handleEdit = async (row) => {
   isEdit.value = true
   currentId.value = row.companyId
-  form.value = {
-    companyName: row.companyName || '',
-    contactPhone: row.contactPhone || '',
-    email: row.email || '',
-    address: row.address || '',
-    businessHours: row.businessHours || '',
-    serviceCities: row.serviceCities || ''
-  }
+  loadingDetail.value = true
   dialogVisible.value = true
+  
+  try {
+    // 使用详情接口获取最新数据
+    const response = await getCompanyDetail(row.companyId)
+    const detail = response.data?.data || response.data
+    form.value = {
+      companyName: detail.companyName || '',
+      contactPhone: detail.contactPhone || '',
+      email: detail.email || '',
+      address: detail.address || '',
+      businessHours: detail.businessHours || '',
+      serviceCities: detail.serviceCities || ''
+    }
+  } catch (error) {
+    console.error('获取公司详情失败，使用列表数据:', error)
+    // 如果获取详情失败，使用列表数据作为备用
+    form.value = {
+      companyName: row.companyName || '',
+      contactPhone: row.contactPhone || '',
+      email: row.email || '',
+      address: row.address || '',
+      businessHours: row.businessHours || '',
+      serviceCities: row.serviceCities || ''
+    }
+  } finally {
+    loadingDetail.value = false
+  }
 }
 
 const handleDelete = async (row) => {
@@ -225,11 +249,11 @@ onMounted(() => {
 <style scoped lang="scss">
 .company-management-view {
   min-height: 100vh;
-  background-color: #f0f2f5;
+  background-color: #f5f7fa;
 }
 
 .content {
-  padding: 20px;
+  padding: 0;
 }
 
 .page-header {

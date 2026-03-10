@@ -201,6 +201,24 @@
       </el-form-item>
       </template>
       
+      <!-- 客户基本信息 -->
+      <el-form-item label="客户姓名" prop="customerName">
+        <el-input
+          v-model="form.customerName"
+          placeholder="请输入客户姓名"
+          maxlength="50"
+          show-word-limit
+        />
+      </el-form-item>
+
+      <el-form-item label="手机号" prop="customerPhone">
+        <el-input
+          v-model="form.customerPhone"
+          placeholder="请输入手机号"
+          maxlength="11"
+        />
+      </el-form-item>
+      
       <el-form-item label="服务地址" prop="serviceAddress">
         <el-input
           v-model="form.serviceAddress"
@@ -243,17 +261,35 @@
           >
             <el-card 
               class="staff-card"
-              :class="{ 'selected': form.staffId === (staff.staffId || staff.staff_id || staff.id) }"
-              @click="selectStaff(staff)"
+              :class="{
+                selected: isStaffSelectable(staff) && form.staffId === (staff.staffId || staff.staff_id || staff.id),
+                unavailable: !isStaffSelectable(staff)
+              }"
+              @click="handleStaffCardClick(staff)"
               shadow="hover"
             >
                <div class="staff-info-simple">
+                <div class="staff-avatar-wrapper">
                 <el-avatar 
                   :size="80" 
                    :src="staff.avatar || staff.avatar_url || 'https://cube.elemecdn.com/0/88/03b0d39583f48206768a7534e55bcpng.png'"
                   class="staff-avatar"
                 />
-                  <div class="staff-name">{{ staff.name }}</div>
+                  <div
+                    v-if="!isStaffSelectable(staff)"
+                    class="unavailable-badge"
+                    title="当前不可服务"
+                  >
+                    <el-icon><WarningFilled /></el-icon>
+                  </div>
+                </div>
+                <div class="staff-name">
+                  {{ staff.name }}
+                  <span
+                    v-if="!isStaffSelectable(staff)"
+                    class="status-text"
+                  >（当前不可服务）</span>
+                </div>
               </div>
             </el-card>
           </el-col>
@@ -271,7 +307,7 @@
 import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { ArrowDown } from '@element-plus/icons-vue'
+import { ArrowDown, WarningFilled } from '@element-plus/icons-vue'
 import { getAvailableServices, getStaffByService, searchStaff } from '@/api/services'
 import dayjs from 'dayjs'
 
@@ -298,14 +334,16 @@ const router = useRouter()
 const formRef = ref(null)
 
 const form = reactive({
-  serviceId: '',
-  staffId: route.query.staffId || '',
+  serviceId: route.query.serviceId ? Number(route.query.serviceId) : '',
+  staffId: route.query.staffId ? Number(route.query.staffId) : '',
   appointmentDate: '',
   startTime: '',
   endTime: '', // 保留用于向后兼容
   endDateTime: '', // 新的结束日期时间字段（支持跨天）
   totalDuration: 0,
   totalDays: 0, // 按天结算的天数
+  customerName: '',
+  customerPhone: '',
   serviceAddress: '',
   specialRequirements: ''
 })
@@ -386,6 +424,11 @@ const rules = computed(() => {
   const baseRules = {
   serviceId: [{ required: true, message: '请选择服务项目', trigger: 'change' }],
   appointmentDate: [{ required: true, message: '请选择预约日期', trigger: 'change' }],
+    customerName: [{ required: true, message: '请输入客户姓名', trigger: 'blur' }],
+    customerPhone: [
+      { required: true, message: '请输入手机号', trigger: 'blur' },
+      { pattern: /^1[3-9]\d{9}$/, message: '请输入正确的手机号', trigger: 'blur' }
+    ],
   serviceAddress: [{ required: true, message: '请输入服务地址', trigger: 'blur' }],
   specialRequirements: [{ required: false, max: 500, message: '特殊要求不能超过500字', trigger: 'blur' }]
 }
@@ -403,7 +446,17 @@ const rules = computed(() => {
   return baseRules
 })
 
-// 根据筛选条件过滤服务人员
+// 判断服务人员是否可被预约选择：工作状态=1 且 账号状态正常
+const isStaffSelectable = (staff) => {
+  if (!staff) return false
+  const workStatus = staff.workStatus ?? staff.work_status
+  const userStatus = staff.userStatus ?? staff.status
+  const isWorkOk = Number(workStatus) === 1 || workStatus === '正常'
+  const isUserOk = userStatus === undefined || Number(userStatus) === 1
+  return isWorkOk && isUserOk
+}
+
+// 根据筛选条件过滤服务人员（暂时保留所有状态，在卡片上区分是否可选）
 const filteredStaffList = computed(() => {
   return [...staffList.value]
 })
@@ -428,13 +481,22 @@ watch(
   { immediate: true }
 )
 
-// 选择服务人员
+// 内部选择服务人员（只在可选时调用）
 const selectStaff = (staff) => {
   const staffId = staff.staffId || staff.staff_id || staff.id
   form.staffId = staffId
   selectedStaffName.value = staff.name
   ElMessage.success(`已选择服务人员：${staff.name}`)
   emit('staff-selected', staff)
+}
+
+// 卡片点击处理：不可服务人员禁止选择，仅提示
+const handleStaffCardClick = (staff) => {
+  if (!isStaffSelectable(staff)) {
+    ElMessage.warning('该服务人员当前不可服务，请选择其他人员')
+    return
+  }
+  selectStaff(staff)
 }
 
 // 从预约表单跳转到家政服务人员资料页面（直接进入某个人的详细资料）
@@ -524,7 +586,17 @@ const loadServices = async () => {
       ...service
     }))
 
-    // 如果路由参数中有服务名称，自动选择对应的服务
+    // 如果路由参数中有 serviceId，则优先按 serviceId 预选
+    const serviceIdFromRoute = route.query.serviceId
+    if (serviceIdFromRoute && services.value.length > 0) {
+      const targetId = Number(serviceIdFromRoute)
+      const matchedById = services.value.find(service => service.id === targetId)
+      if (matchedById) {
+        form.serviceId = matchedById.id
+        handleServiceChange(matchedById.id)
+      }
+    } else {
+      // 否则，如果有服务名称，则按名称预选
     const serviceNameFromRoute = route.query.serviceName
     if (serviceNameFromRoute && services.value.length > 0) {
       const matchedService = services.value.find(service => 
@@ -534,6 +606,7 @@ const loadServices = async () => {
       if (matchedService) {
         form.serviceId = matchedService.id
         handleServiceChange(matchedService.id)
+        }
       }
     }
   } catch (error) {
@@ -722,10 +795,12 @@ onMounted(() => {
   }
 })
 
-// 向父组件暴露需要访问的属性（用于同步选中的服务人员）
+// 向父组件暴露需要访问的属性和方法
 defineExpose({
   form,
-  selectedStaffName
+  selectedStaffName,
+  loadServices,
+  handleServiceChange
 })
 </script>
 
@@ -786,6 +861,10 @@ defineExpose({
   padding: 10px;
 }
 
+.staff-avatar-wrapper {
+  position: relative;
+}
+
 .staff-avatar {
   flex-shrink: 0;
 }
@@ -796,6 +875,37 @@ defineExpose({
   color: #333;
   text-align: center;
   word-break: break-all;
+}
+
+.staff-name .status-text {
+  font-size: 12px;
+  color: #f56c6c;
+  font-weight: normal;
+}
+
+.staff-card.unavailable {
+  cursor: not-allowed;
+  opacity: 0.7;
+  position: relative;
+}
+
+.unavailable-badge {
+  position: absolute;
+  right: -4px;
+  top: -4px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background-color: #f56c6c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  box-shadow: 0 0 0 2px #fff;
+
+  :deep(.el-icon) {
+    font-size: 14px;
+  }
 }
 
 .selected-staff-card {

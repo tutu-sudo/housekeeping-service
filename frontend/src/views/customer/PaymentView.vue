@@ -63,7 +63,7 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { CreditCard, Money } from '@element-plus/icons-vue'
-import { getAppointmentDetail, updateAppointmentStatus } from '@/api/appointments'
+import { getAppointmentDetail } from '@/api/appointments'
 import { createPayment, queryPaymentStatus, createAlipayPayment } from '@/api/payment'
 import Navigation from '@/components/common/Navigation.vue'
 
@@ -101,6 +101,15 @@ const loadAppointment = async () => {
       appointmentId: data.appointmentId || data.id || appointmentId,
       id: data.id || data.appointmentId || appointmentId
     }
+
+    // 按新的业务规则：仅当预约状态为「待付款」（status = 1）时才允许进入支付流程
+    const status = typeof appointment.value.status === 'string'
+      ? parseInt(appointment.value.status, 10)
+      : appointment.value.status
+    if (status !== 1) {
+      ElMessage.warning('当前订单状态不支持支付，请刷新订单或重新下单')
+      router.push(`/appointment/${appointmentId}`)
+    }
   } catch (error) {
     console.error('获取订单信息失败:', error)
     const errorMsg = error.response?.data?.message || error.message || '获取订单信息失败'
@@ -124,28 +133,55 @@ const handlePayment = async () => {
       // 保存appointmentId到localStorage，以便支付成功后页面使用
       localStorage.setItem('pendingPaymentAppointmentId', appointmentId.toString())
       
+      console.log('🔄 开始创建支付宝支付，预约ID:', appointmentId)
+      
       // 支付宝支付：使用GET方式获取支付URL
       const response = await createAlipayPayment(appointmentId)
+      
+      console.log('📥 支付宝支付响应:', response)
       
       // 处理响应：根据后端修复后的格式，URL在 result.data 字段中
       // 响应格式: { code: 200, message: "success", data: "支付URL", success: true }
       const result = response.data
       
+      console.log('📦 解析后的响应数据:', result)
+      
       // ✅ 检查响应是否成功，并从data字段获取支付URL
       if (result && result.code === 200 && result.success && result.data) {
         const paymentUrl = result.data
         
+        console.log('✅ 获取到支付URL:', paymentUrl)
+        
         if (typeof paymentUrl === 'string' && paymentUrl.trim()) {
-          // 跳转到支付宝支付页面
-          window.location.href = paymentUrl
-          // 注意：这里不设置paying.value = false，因为页面会跳转
+          // 验证URL格式
+          if (paymentUrl.startsWith('http://') || paymentUrl.startsWith('https://')) {
+            // 跳转到支付宝支付页面
+            console.log('🚀 跳转到支付宝支付页面')
+            window.location.href = paymentUrl
+            // 注意：这里不设置paying.value = false，因为页面会跳转
+          } else {
+            localStorage.removeItem('pendingPaymentAppointmentId')
+            console.error('❌ 支付URL格式不正确:', paymentUrl)
+            ElMessage.error('获取支付链接失败：支付URL格式不正确')
+            paying.value = false
+          }
         } else {
           localStorage.removeItem('pendingPaymentAppointmentId')
+          console.error('❌ 支付URL为空或格式错误:', paymentUrl)
           ElMessage.error('获取支付链接失败：支付URL为空')
           paying.value = false
         }
+      } else if (result && result.code === 3006) {
+        // 支付超时，后端已经将订单关闭/删除
+        localStorage.removeItem('pendingPaymentAppointmentId')
+        console.warn('⚠️ 支付超时，订单已关闭')
+        ElMessage.error(result.message || '支付超时，订单已关闭')
+        // 返回预约详情页，展示最新状态
+        router.push(`/appointment/${appointmentId}`)
+        paying.value = false
       } else {
         localStorage.removeItem('pendingPaymentAppointmentId')
+        console.error('❌ 获取支付链接失败，响应数据:', result)
         const errorMsg = result?.message || '获取支付链接失败，请重试'
         ElMessage.error(errorMsg)
         paying.value = false
@@ -167,8 +203,8 @@ const handlePayment = async () => {
       } else if (response.data?.paymentId) {
         startPaymentPolling(response.data.paymentId)
       } else {
+        // 其余场景认为由后端直接完成扣款并更新预约状态，这里只做跳转展示
         ElMessage.success('支付成功')
-        await updateAppointmentStatusAfterPayment()
         router.push({
           path: '/appointment/' + appointmentId,
           query: { paymentSuccess: true }
@@ -178,9 +214,34 @@ const handlePayment = async () => {
     }
   } catch (error) {
     localStorage.removeItem('pendingPaymentAppointmentId')
-    console.error('支付失败:', error)
-    const errorMessage = error.response?.data?.message || error.message || '支付失败，请重试'
-    ElMessage.error(errorMessage)
+    console.error('❌ 支付失败，错误详情:', {
+      message: error.message,
+      response: error.response,
+      status: error.response?.status,
+      statusText: error.response?.statusText,
+      data: error.response?.data,
+      url: error.config?.url,
+      method: error.config?.method
+    })
+
+    const resp = error.response?.data
+    const status = error.response?.status
+    
+    // 根据不同的错误类型给出更详细的提示
+    if (status === 404) {
+      const requestUrl = error.config?.url || '未知'
+      console.error('❌ 404错误，请求的URL:', requestUrl)
+      ElMessage.error(`支付接口不存在 (404)。请检查后端接口路径是否正确: ${requestUrl}`)
+    } else if (status === 500) {
+      ElMessage.error('服务器内部错误，请稍后重试或联系客服')
+    } else if (resp && resp.code === 3006) {
+      // 后端返回的支付超时错误
+      ElMessage.error(resp.message || '支付超时，订单已关闭')
+      router.push(`/appointment/${appointmentId}`)
+    } else {
+      const errorMessage = resp?.message || error.message || '支付失败，请重试'
+      ElMessage.error(errorMessage)
+    }
     paying.value = false
   }
 }
@@ -199,7 +260,7 @@ const startPaymentPolling = async (paymentId) => {
       if (status === 'paid' || status === 'success') {
         stopPaymentPolling()
         ElMessage.success('支付成功')
-        await updateAppointmentStatusAfterPayment()
+        // 由后端回调更新状态，这里仅跳转到详情页让用户查看最新状态
         router.push({
           path: '/appointment/' + appointment.value.id,
           query: { paymentSuccess: true }
@@ -224,16 +285,6 @@ const stopPaymentPolling = () => {
   if (paymentPollingTimer) {
     clearInterval(paymentPollingTimer)
     paymentPollingTimer = null
-  }
-}
-
-// 支付成功后更新预约状态
-const updateAppointmentStatusAfterPayment = async () => {
-  try {
-    // 更新预约状态为待接单
-    await updateAppointmentStatus(appointment.value.id, 'pending_confirm')
-  } catch (error) {
-    console.error('更新预约状态失败:', error)
   }
 }
 

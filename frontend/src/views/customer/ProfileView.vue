@@ -35,7 +35,7 @@
                       style="width: 150px; margin-left: 10px;"
                       @change="loadAppointments"
                     >
-                      <el-option label="全部" :value="undefined" />
+                      <el-option label="全部" :value="''" />
                       <el-option label="待确认" :value="0" />
                       <el-option label="已确认" :value="1" />
                       <el-option label="进行中" :value="2" />
@@ -107,7 +107,7 @@
                       </el-tag>
                     </template>
                   </el-table-column>
-                  <el-table-column label="操作" width="280" fixed="right" align="center">
+                  <el-table-column label="操作" width="180" fixed="right" align="center">
                     <template #default="scope">
                       <el-button
                         size="small"
@@ -117,17 +117,7 @@
                       >
                         查看详情
                       </el-button>
-                      
-                      <el-button
-                        size="small"
-                        type="warning"
-                        link
-                        v-if="canPay(scope.row)"
-                        @click="goToPayment(scope.row)"
-                      >
-                        去支付
-                      </el-button>
-                      
+                      <!-- 列表中不再直接展示“去支付”，只保留在详情页中支付 -->
                       <el-button
                         size="small"
                         type="success"
@@ -170,8 +160,61 @@
                     <el-button type="primary" @click="updateInfo">
                       保存
                     </el-button>
+                    <el-button type="default" style="margin-left: 16px" @click="openChangePasswordDialog">
+                      修改密码
+                    </el-button>
                   </el-form-item>
                 </el-form>
+
+                <!-- 修改密码弹窗 -->
+                <el-dialog
+                  v-model="changePasswordDialogVisible"
+                  title="修改密码"
+                  width="400px"
+                >
+                  <el-form
+                    :model="changePasswordForm"
+                    :rules="changePasswordRules"
+                    ref="changePasswordFormRef"
+                    label-width="100px"
+                  >
+                    <el-form-item label="旧密码" prop="oldPassword">
+                      <el-input
+                        v-model="changePasswordForm.oldPassword"
+                        type="password"
+                        autocomplete="off"
+                        show-password
+                        placeholder="请输入当前登录密码"
+                      />
+                    </el-form-item>
+                    <el-form-item label="新密码" prop="newPassword">
+                      <el-input
+                        v-model="changePasswordForm.newPassword"
+                        type="password"
+                        autocomplete="off"
+                        show-password
+                        placeholder="请输入新密码"
+                      />
+                    </el-form-item>
+                    <el-form-item label="确认新密码" prop="confirmPassword">
+                      <el-input
+                        v-model="changePasswordForm.confirmPassword"
+                        type="password"
+                        autocomplete="off"
+                        show-password
+                        placeholder="请再次输入新密码"
+                      />
+                    </el-form-item>
+                  </el-form>
+                  <template #footer>
+                    <span class="dialog-footer">
+                      <el-button @click="changePasswordDialogVisible = false">取 消</el-button>
+                      <el-button type="primary" :loading="changingPassword" @click="handleChangePassword">
+                        确 认
+                      </el-button>
+                    </span>
+                  </template>
+                </el-dialog>
               </el-tab-pane>
               
               <el-tab-pane label="我的评价" name="reviews">
@@ -251,10 +294,11 @@ import { ElMessage } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
 import { getToken } from '@/utils/auth'
 import { getMyAppointments, getAppointmentDetail } from '@/api/appointments'
-import { updateUserInfo } from '@/api/user'
+import { getUserInfo as apiGetUserInfo, updateUserInfo } from '@/api/user'
 import { getMyReviews } from '@/api/reviews'
 import { getServiceDetail } from '@/api/services'
 import { getStaffDetail } from '@/api/staff'
+import { changePassword } from '@/api/auth-extra'
 import { APPOINTMENT_STATUS_CONFIG, APPOINTMENT_STATUS, PAYMENT_STATUS_CONFIG } from '@/utils/constants'
 import Navigation from '@/components/common/Navigation.vue'
 
@@ -268,7 +312,7 @@ const loading = ref(false)
 const loadingReviews = ref(false)
 const refreshing = ref(false)
 const activeTab = ref('appointments')
-const statusFilter = ref(undefined)
+const statusFilter = ref('')
 let statusPollingTimer = null // 快速状态轮询（针对待支付订单）
 let autoRefreshTimer = null // 定期自动刷新（所有数据）
 
@@ -278,6 +322,39 @@ const userInfo = ref({
   phone: '',
   email: ''
 })
+
+// 修改密码弹窗相关
+const changePasswordDialogVisible = ref(false)
+const changingPassword = ref(false)
+const changePasswordFormRef = ref(null)
+const changePasswordForm = ref({
+  oldPassword: '',
+  newPassword: '',
+  confirmPassword: ''
+})
+
+const validateConfirmPassword = (rule, value, callback) => {
+  if (!value) {
+    callback(new Error('请再次输入新密码'))
+  } else if (value !== changePasswordForm.value.newPassword) {
+    callback(new Error('两次输入的密码不一致'))
+  } else {
+    callback()
+  }
+}
+
+const changePasswordRules = {
+  oldPassword: [
+    { required: true, message: '请输入旧密码', trigger: 'blur' }
+  ],
+  newPassword: [
+    { required: true, message: '请输入新密码', trigger: 'blur' },
+    { min: 6, max: 20, message: '密码长度应为6-20位', trigger: 'blur' }
+  ],
+  confirmPassword: [
+    { required: true, validator: validateConfirmPassword, trigger: 'blur' }
+  ]
+}
 
 const userId = computed(() => store.getters['user/userId'])
 
@@ -321,7 +398,7 @@ const loadAppointments = async () => {
   try {
     // 使用新的API，自动从token获取userId
     const params = {}
-    if (statusFilter.value !== undefined && statusFilter.value !== null) {
+    if (statusFilter.value !== '' && statusFilter.value !== null && statusFilter.value !== undefined) {
       params.status = statusFilter.value
     }
     
@@ -553,8 +630,8 @@ const startStatusPolling = () => {
   
   // 检查是否有待支付的订单（支付状态需要及时反馈）
   const needPolling = appointments.value.some(apt => 
-    (apt.paymentStatus === 0 || apt.paymentStatus === 'unpaid') && 
-    apt.status === APPOINTMENT_STATUS.PENDING
+    (apt.paymentStatus === 0 || apt.paymentStatus === 'unpaid' || apt.paymentStatus === null || apt.paymentStatus === undefined) && 
+    apt.status === APPOINTMENT_STATUS.CONFIRMED
   )
   
   if (!needPolling) return
@@ -562,8 +639,8 @@ const startStatusPolling = () => {
   statusPollingTimer = setInterval(async () => {
     // 只轮询待支付的订单（支付状态变化需要及时反馈）
     const unpaidAppointments = appointments.value.filter(apt => 
-      (apt.paymentStatus === 0 || apt.paymentStatus === 'unpaid') && 
-      apt.status === APPOINTMENT_STATUS.PENDING
+      (apt.paymentStatus === 0 || apt.paymentStatus === 'unpaid' || apt.paymentStatus === null || apt.paymentStatus === undefined) && 
+      apt.status === APPOINTMENT_STATUS.CONFIRMED
     )
     
     if (unpaidAppointments.length === 0) {
@@ -580,8 +657,8 @@ const startStatusPolling = () => {
     
     // 检查是否还有待支付的订单
     const stillNeedPolling = appointments.value.some(apt => 
-      (apt.paymentStatus === 0 || apt.paymentStatus === 'unpaid') && 
-      apt.status === APPOINTMENT_STATUS.PENDING
+      (apt.paymentStatus === 0 || apt.paymentStatus === 'unpaid' || apt.paymentStatus === null || apt.paymentStatus === undefined) && 
+      apt.status === APPOINTMENT_STATUS.CONFIRMED
     )
     
     if (!stillNeedPolling) {
@@ -717,24 +794,50 @@ const goToPayment = (row) => {
   }
 }
 
-// 判断是否可以支付
+// 判断是否可以支付（目前仅在详情页中使用列表入口已移除，这里保留逻辑以备后续扩展）
 const canPay = (appointment) => {
-  // 状态为待确认(0)且支付状态为待支付(0)
-  return appointment.status === APPOINTMENT_STATUS.PENDING && 
-         (appointment.paymentStatus === 0 || appointment.paymentStatus === 'unpaid' || !appointment.paymentStatus)
+  if (!appointment) return false
+
+  const rawStatus = appointment.status
+  const statusNum = typeof rawStatus === 'string' ? parseInt(rawStatus, 10) : rawStatus
+  const paymentStatus = appointment.paymentStatus
+
+  const isUnpaid =
+    paymentStatus === 0 ||
+    paymentStatus === 'unpaid' ||
+    paymentStatus === null ||
+    paymentStatus === undefined
+
+  return statusNum === APPOINTMENT_STATUS.CONFIRMED && isUnpaid
 }
 
 // 判断是否可以评价
 const canReview = (appointment) => {
   // 处理状态：可能是数字或字符串
   const status = appointment.status !== undefined && appointment.status !== null ? appointment.status : 0
-  const statusNum = typeof status === 'string' ? parseInt(status) : status
+  const statusNum = typeof status === 'string' ? parseInt(status, 10) : status
   
-  // 状态为已完成(3)且还没有评价（检查多个可能的字段）
-  return statusNum === APPOINTMENT_STATUS.COMPLETED && 
-         !appointment.hasReview && 
-         !appointment.reviewed &&
-         statusNum === 3
+  // 检查预约状态：必须是已完成（status === 3）
+  if (statusNum !== APPOINTMENT_STATUS.COMPLETED && statusNum !== 3) {
+    return false
+  }
+  
+  // 检查支付状态：必须是已支付（paymentStatus === 1）
+  const paymentStatus = appointment.paymentStatus
+  const isPaid = paymentStatus === 1 || 
+                 paymentStatus === 'paid' || 
+                 paymentStatus === 'success' ||
+                 (typeof paymentStatus === 'string' && parseInt(paymentStatus, 10) === 1)
+  if (!isPaid) {
+    return false
+  }
+  
+  // 检查是否已经评价过（检查多个可能的字段）
+  if (appointment.hasReview || appointment.reviewed) {
+    return false
+  }
+  
+  return true
 }
 
 const getStatusType = (status) => {
@@ -786,10 +889,26 @@ const beforeAvatarUpload = (file) => {
 }
 
 const handleAvatarSuccess = async (response) => {
-  if (response.data?.url) {
-    userInfo.value.avatar = response.data.url
-    await updateInfo() // 自动保存
+  try {
+    // 后端返回的是 Result<FileInfo>，实际数据在 response.data 中
+    const fileInfo = response?.data || response
+    const avatarUrl = fileInfo?.fileUrl || fileInfo?.url
+
+    if (!avatarUrl) {
+      ElMessage.error('头像上传失败：未获取到文件地址')
+      return
+    }
+
+    // 先更新本地表单中的头像地址
+    userInfo.value.avatar = avatarUrl
+
+    // 再调用用户信息更新接口，把 avatar 持久化到 User 表
+    await updateInfo() // 内部会调用 PUT /users/{userId} 并同步到 store
+
     ElMessage.success('头像上传成功')
+  } catch (error) {
+    console.error('头像上传或更新失败:', error)
+    ElMessage.error(error.message || '头像上传失败')
   }
 }
 
@@ -804,6 +923,45 @@ const updateInfo = async () => {
   } catch (error) {
     ElMessage.error(error.message || '保存失败')
   }
+}
+
+const openChangePasswordDialog = () => {
+  changePasswordForm.value = {
+    oldPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  }
+  changePasswordDialogVisible.value = true
+}
+
+const handleChangePassword = () => {
+  if (!changePasswordFormRef.value) return
+  
+  changePasswordFormRef.value.validate(async (valid) => {
+    if (!valid) return
+    
+    if (changePasswordForm.value.oldPassword === changePasswordForm.value.newPassword) {
+      ElMessage.warning('新密码不能与旧密码相同')
+      return
+    }
+    
+    changingPassword.value = true
+    try {
+      const payload = {
+        oldPassword: changePasswordForm.value.oldPassword,
+        newPassword: changePasswordForm.value.newPassword
+      }
+      await changePassword(payload)
+      ElMessage.success('密码修改成功，请使用新密码重新登录')
+      changePasswordDialogVisible.value = false
+      // 密码修改成功后，可根据后端策略选择是否强制退出重新登录
+    } catch (error) {
+      const msg = error.response?.data?.message || error.message || '密码修改失败'
+      ElMessage.error(msg)
+    } finally {
+      changingPassword.value = false
+    }
+  })
 }
 
 // 监听路由变化，如果是从预约成功/支付成功页面跳转过来，刷新数据
@@ -839,6 +997,21 @@ const handleVisibilityChange = () => {
 }
 
 onMounted(async () => {
+  // 优先从后端获取最新的用户资料，保证头像/手机号/邮箱是最新的
+  if (userId.value) {
+    try {
+      const res = await apiGetUserInfo(userId.value)
+      const data = res.data?.data || res.data || {}
+      userInfo.value = {
+        avatar: data.avatar || '',
+        username: data.username || '',
+        phone: data.phone || '',
+        email: data.email || ''
+      }
+      // 同步更新到全局 store，导航栏等使用的是这里的 userInfo
+      store.dispatch('user/updateUserInfo', data)
+    } catch (error) {
+      // 如果请求失败，则退回到本地 store 中的用户信息
   const info = store.getters['user/userInfo']
   if (info) {
     userInfo.value = { 
@@ -846,6 +1019,8 @@ onMounted(async () => {
       username: info.username || '',
       phone: info.phone || '',
       email: info.email || ''
+        }
+      }
     }
   }
   

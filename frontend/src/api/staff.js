@@ -78,12 +78,11 @@ export function deleteStaffSkill(skillId) {
 // ==================== 兼容旧接口（保留用于其他页面） ====================
 
 // 获取服务人员详情（用于顾客端查看）
-// 注意：此API可能不存在，调用时会静默失败，不会显示错误消息
+// 公开接口，不需要 token（可选）
 export function getStaffDetail(staffId) {
   return request({
     url: `/staff/${staffId}`,
-    method: 'get',
-    skipErrorHandler: true // 静默失败，不显示全局错误消息
+    method: 'get'
   })
 }
 
@@ -96,7 +95,9 @@ export function updateStaffInfo(staffId, data) {
   })
 }
 
-// 获取服务人员技能列表（兼容旧接口）
+// 获取服务人员技能列表（用于顾客端查看）
+// 公开接口，不需要 token（可选）
+// 后端会自动过滤，只返回已审核通过的技能（certificateStatus = 1）
 export function getStaffSkillsByStaffId(staffId) {
   return request({
     url: `/staff/${staffId}/skills`,

@@ -79,41 +79,147 @@
                 </el-descriptions-item>
               </el-descriptions>
               
-              <!-- 状态流转提示 -->
+              <!-- 三方互评展示：顾客 / 服务人员自评 / 管理员评价 -->
+              <el-divider />
+
+              <h3 style="margin-bottom: 10px;">本次服务评价</h3>
+
+              <!-- 顾客评价（当前登录顾客对本单的评价） -->
+              <h4 style="margin: 6px 0;">我的评价</h4>
+              <div v-if="customerReviewBlock">
+                <el-descriptions :column="2" border>
+                  <el-descriptions-item label="总体评分">
+                    <el-rate v-model="customerReviewBlock.overallRating" disabled show-score text-color="#ff9900" />
+                  </el-descriptions-item>
+                  <el-descriptions-item label="评价时间">
+                    {{ customerReviewBlock.reviewTime || '-' }}
+                  </el-descriptions-item>
+                  <el-descriptions-item label="服务态度" v-if="customerReviewBlock.serviceAttitudeRating !== null && customerReviewBlock.serviceAttitudeRating !== undefined">
+                    <el-rate v-model="customerReviewBlock.serviceAttitudeRating" disabled />
+                    <span style="margin-left:8px;color:#666;">{{ customerReviewBlock.serviceAttitudeRating }}分</span>
+                  </el-descriptions-item>
+                  <el-descriptions-item label="专业能力" v-if="customerReviewBlock.professionalAbilityRating !== null && customerReviewBlock.professionalAbilityRating !== undefined">
+                    <el-rate v-model="customerReviewBlock.professionalAbilityRating" disabled />
+                    <span style="margin-left:8px;color:#666;">{{ customerReviewBlock.professionalAbilityRating }}分</span>
+                  </el-descriptions-item>
+                  <el-descriptions-item label="服务质量" v-if="customerReviewBlock.serviceQualityRating !== null && customerReviewBlock.serviceQualityRating !== undefined">
+                    <el-rate v-model="customerReviewBlock.serviceQualityRating" disabled />
+                    <span style="margin-left:8px;color:#666;">{{ customerReviewBlock.serviceQualityRating }}分</span>
+                  </el-descriptions-item>
+                  <el-descriptions-item label="评价内容" :span="2">
+                    {{ customerReviewBlock.reviewContent || '（无）' }}
+                  </el-descriptions-item>
+                </el-descriptions>
+              </div>
               <el-alert
-                v-if="canPay && isPaymentExpired"
-                title="订单已过期，无法支付"
+                v-else
+                title="您还没有对本次服务进行评价，可以在订单完成后点击“评价服务”进行评价。"
+                type="info"
+                :closable="false"
+                show-icon
+                style="margin-bottom: 16px;"
+              />
+
+              <!-- 服务人员自评 -->
+              <h4 style="margin: 6px 0;">服务人员自评</h4>
+              <div v-if="staffSelfReviewBlock">
+                <el-descriptions :column="2" border>
+                  <el-descriptions-item label="总体评分">
+                    <el-rate v-model="staffSelfReviewBlock.overallRating" disabled show-score text-color="#ff9900" />
+                  </el-descriptions-item>
+                  <el-descriptions-item label="评价时间">
+                    {{ staffSelfReviewBlock.reviewTime || '-' }}
+                  </el-descriptions-item>
+                  <el-descriptions-item label="自评内容" :span="2">
+                    {{ staffSelfReviewBlock.reviewContent || '（无）' }}
+                  </el-descriptions-item>
+                </el-descriptions>
+              </div>
+              <el-empty
+                v-else
+                description="服务人员暂未对本次服务进行自评"
+                style="margin-bottom: 16px;"
+              />
+
+              <!-- 管理员评价（公司视角） -->
+              <h4 style="margin: 6px 0;">平台评价</h4>
+              <div class="admin-review-blocks">
+                <div class="admin-review-item">
+                  <h5>平台对顾客的评价</h5>
+                  <div v-if="adminReviewForCustomerBlock">
+                    <el-descriptions :column="2" border>
+                      <el-descriptions-item label="总体评分">
+                        <el-rate v-model="adminReviewForCustomerBlock.overallRating" disabled show-score text-color="#ff9900" />
+                      </el-descriptions-item>
+                      <el-descriptions-item label="评价时间">
+                        {{ adminReviewForCustomerBlock.reviewTime || '-' }}
+                      </el-descriptions-item>
+                      <el-descriptions-item label="评价内容" :span="2">
+                        {{ adminReviewForCustomerBlock.reviewContent || '（无）' }}
+                      </el-descriptions-item>
+                    </el-descriptions>
+                  </div>
+                  <el-empty v-else description="平台暂未对您本单进行评价" />
+                </div>
+
+                <div class="admin-review-item">
+                  <h5>平台对服务人员的评价</h5>
+                  <div v-if="adminReviewForStaffBlock">
+                    <el-descriptions :column="2" border>
+                      <el-descriptions-item label="总体评分">
+                        <el-rate v-model="adminReviewForStaffBlock.overallRating" disabled show-score text-color="#ff9900" />
+                      </el-descriptions-item>
+                      <el-descriptions-item label="评价时间">
+                        {{ adminReviewForStaffBlock.reviewTime || '-' }}
+                      </el-descriptions-item>
+                      <el-descriptions-item label="评价内容" :span="2">
+                        {{ adminReviewForStaffBlock.reviewContent || '（无）' }}
+                      </el-descriptions-item>
+                    </el-descriptions>
+                  </div>
+                  <el-empty v-else description="平台暂未对本次服务进行评价" />
+                </div>
+              </div>
+              
+              <!-- 状态流转提示（基于新的数值状态含义） -->
+              <el-alert
+                v-if="appointment.status === 0"
+                title="预约成功，等待家政服务人员接单"
+                type="info"
+                :closable="false"
+                show-icon
+                style="margin: 20px 0;"
+              />
+
+              <el-alert
+                v-else-if="appointment.status === 1 && !isPaymentExpired"
+                :title="`服务人员已接单，请在 ${PAYMENT_EXPIRE_MINUTES} 分钟内完成支付`"
+                type="warning"
+                :closable="false"
+                show-icon
+                style="margin: 20px 0;"
+              >
+                <template #default>
+                  <div>请在 {{ formatPaymentDeadline(paymentDeadline) }} 前完成支付，逾期订单将自动关闭。</div>
+                </template>
+              </el-alert>
+
+              <el-alert
+                v-else-if="appointment.status === 1 && isPaymentExpired"
+                title="支付超时，订单已关闭"
                 type="error"
                 :closable="false"
                 show-icon
                 style="margin: 20px 0;"
               >
                 <template #default>
-                  <div>该订单已超过支付期限（{{ PAYMENT_EXPIRE_MINUTES }}分钟），订单将自动取消。如有疑问，请联系客服。</div>
+                  <div>该订单已超过支付有效期（{{ PAYMENT_EXPIRE_MINUTES }}分钟），如需继续服务请重新下单。</div>
                 </template>
               </el-alert>
               
               <el-alert
-                v-if="canPay && !isPaymentExpired"
-                :title="`请在 ${formatPaymentDeadline(paymentDeadline)} 前完成支付`"
-                type="warning"
-                :closable="false"
-                show-icon
-                style="margin: 20px 0;"
-              />
-              
-              <el-alert
-                v-if="appointment.status === 'pending_confirm' || (appointment.status === 0 && appointment.paymentStatus === 1)"
-                title="支付成功，等待服务人员接单"
-                type="info"
-                :closable="false"
-                show-icon
-                style="margin: 20px 0;"
-              />
-              
-              <el-alert
-                v-if="appointment.status === 'confirmed' || appointment.status === 1"
-                title="服务人员已接单，请等待服务开始"
+                v-else-if="appointment.status === 2 && (appointment.paymentStatus === 1 || appointment.paymentStatus === 'paid' || appointment.paymentStatus === 'success')"
+                title="已付款，等待服务开始或服务进行中"
                 type="success"
                 :closable="false"
                 show-icon
@@ -121,8 +227,37 @@
               />
               
               <el-alert
-                v-if="appointment.status === 'in_service' || appointment.status === 2"
-                title="服务进行中"
+                v-else-if="appointment.status === 3 && (appointment.paymentStatus === 1 || appointment.paymentStatus === 'paid' || appointment.paymentStatus === 'success')"
+                title="服务已完成，感谢您的使用"
+                type="success"
+                :closable="false"
+                show-icon
+                style="margin: 20px 0;"
+              />
+              
+              <!-- 状态不一致的提示：已完成但未支付 -->
+              <el-alert
+                v-else-if="appointment.status === 3 && appointment.paymentStatus !== 1 && appointment.paymentStatus !== 'paid' && appointment.paymentStatus !== 'success'"
+                title="订单状态异常：服务已完成但未支付，请联系客服"
+                type="warning"
+                :closable="false"
+                show-icon
+                style="margin: 20px 0;"
+              />
+              
+              <!-- 状态不一致的提示：服务中但未支付 -->
+              <el-alert
+                v-else-if="appointment.status === 2 && appointment.paymentStatus !== 1 && appointment.paymentStatus !== 'paid' && appointment.paymentStatus !== 'success'"
+                title="订单状态异常：服务中但未支付，请联系客服"
+                type="warning"
+                :closable="false"
+                show-icon
+                style="margin: 20px 0;"
+              />
+              
+              <el-alert
+                v-else-if="appointment.status === 4"
+                title="订单已取消"
                 type="info"
                 :closable="false"
                 show-icon
@@ -130,7 +265,16 @@
               />
               
               <el-alert
-                v-if="(appointment.status === 'completed' || appointment.status === 3) && !appointment.reviewed"
+                v-else-if="appointment.status === 5"
+                title="订单已关闭（服务人员拒单或超时未支付）"
+                type="warning"
+                :closable="false"
+                show-icon
+                style="margin: 20px 0;"
+              />
+              
+              <el-alert
+                v-if="appointment.status === 3 && !appointment.reviewed && (appointment.paymentStatus === 1 || appointment.paymentStatus === 'paid' || appointment.paymentStatus === 'success')"
                 title="服务已完成，请对本次服务进行评价"
                 type="success"
                 :closable="false"
@@ -216,8 +360,10 @@ import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getAppointmentDetail, updateAppointmentStatus } from '@/api/appointments'
+import * as reviewsApi from '@/api/reviews'
 import { getServiceDetail } from '@/api/services'
 import { getStaffDetail } from '@/api/staff'
+import { queryPaymentStatusByAppointment } from '@/api/payment'
 import { APPOINTMENT_STATUS_CONFIG, PAYMENT_STATUS_CONFIG } from '@/utils/constants'
 import Navigation from '@/components/common/Navigation.vue'
 import { CreditCard } from '@element-plus/icons-vue'
@@ -228,42 +374,52 @@ const route = useRoute()
 
 const appointment = ref(null)
 let statusPollingTimer = null
-
-const canEdit = computed(() => {
-  if (!appointment.value) return false
-  const status = appointment.value.status
-  // 状态为待确认(0)或待支付状态
-  return status === 0 || status === 'pending' || status === 'pending_payment'
-})
-
-const canCancel = computed(() => {
-  if (!appointment.value) return false
-  const status = appointment.value.status
-  // 状态为待确认(0)、已确认(1)可以取消
-  return status === 0 || status === 1 || status === 'pending_payment' || status === 'pending_confirm' || status === 'confirmed'
-})
+const customerReviewBlock = ref(null)
+const staffSelfReviewBlock = ref(null)
+const adminReviewForCustomerBlock = ref(null)
+const adminReviewForStaffBlock = ref(null)
 
 const canPay = computed(() => {
   if (!appointment.value) return false
-  const status = appointment.value.status
+
+  // 只有当订单处于「待付款」状态（1），且支付状态为未支付时，才允许用户发起支付。
+  // 是否真正允许支付（包括是否超时等），仍由后端的 validatePayable 做最终校验。
+  const rawStatus = appointment.value.status
+  const status = typeof rawStatus === 'string' ? parseInt(rawStatus, 10) : rawStatus
   const paymentStatus = appointment.value.paymentStatus
-  // 状态为待确认(0)且支付状态为待支付(0)
-  return (status === 0 || status === 'pending') && 
-         (paymentStatus === 0 || paymentStatus === 'unpaid' || !paymentStatus)
+
+  const isUnpaid =
+    paymentStatus === 0 ||
+    paymentStatus === 'unpaid' ||
+    paymentStatus === null ||
+    paymentStatus === undefined
+
+  return status === 1 && isUnpaid
 })
 
 // 支付过期时间（创建订单后10分钟内需支付，可根据实际业务调整）
 const PAYMENT_EXPIRE_MINUTES = 10
 
-// 计算支付截止时间
+// 计算支付截止时间：从服务人员「接单时间」开始计时10分钟
 const paymentDeadline = computed(() => {
-  if (!appointment.value || !appointment.value.createTime) return null
+  if (!appointment.value) return null
   if (!canPay.value) return null
   
   try {
-    const createTime = dayjs(appointment.value.createTime)
-    if (!createTime.isValid()) return null
-    return createTime.add(PAYMENT_EXPIRE_MINUTES, 'minute')
+    // 优先使用后端返回的 acceptTime / accept_time，没有则退回到 createTime
+    const baseTimeStr =
+      appointment.value.acceptTime ||
+      appointment.value.accept_time ||
+      appointment.value.createTime ||
+      appointment.value.create_time ||
+      appointment.value.createDate ||
+      appointment.value.create_date
+
+    if (!baseTimeStr) return null
+
+    const baseTime = dayjs(baseTimeStr)
+    if (!baseTime.isValid()) return null
+    return baseTime.add(PAYMENT_EXPIRE_MINUTES, 'minute')
   } catch (error) {
     console.warn('计算支付截止时间失败:', error)
     return null
@@ -284,11 +440,21 @@ const formatPaymentDeadline = (deadline) => {
 
 const canReview = computed(() => {
   if (!appointment.value) return false
-  const status = appointment.value.status
-  // 状态为已完成(3)且还没有评价
-  return (status === 3 || status === 'completed') && 
-         appointment.value.reviewed !== true && 
-         !appointment.value.hasReview
+  
+  // 检查预约状态：必须是已完成（status === 3）
+  const rawStatus = appointment.value.status
+  const status = typeof rawStatus === 'string' ? parseInt(rawStatus, 10) : rawStatus
+  if (status !== 3 && status !== 'completed') return false
+  
+  // 检查支付状态：必须是已支付（paymentStatus === 1）
+  const paymentStatus = appointment.value.paymentStatus
+  const isPaid = paymentStatus === 1 || paymentStatus === 'paid' || paymentStatus === 'success'
+  if (!isPaid) return false
+  
+  // 检查是否已经评价过
+  if (appointment.value.reviewed === true || appointment.value.hasReview) return false
+  
+  return true
 })
 
 const getStatusType = (status) => {
@@ -368,6 +534,8 @@ const loadAppointment = async () => {
       totalAmount: data.totalAmount || data.total_amount || 0,
       // 处理状态（统一为数字）
       status: data.status !== undefined && data.status !== null ? data.status : 0,
+      // 接单时间（用于计算支付倒计时）
+      acceptTime: data.acceptTime || data.accept_time || null,
       // 处理支付状态（确保正确映射，支持多种字段名格式）
       paymentStatus: data.paymentStatus !== undefined && data.paymentStatus !== null 
         ? (typeof data.paymentStatus === 'string' ? parseInt(data.paymentStatus, 10) : data.paymentStatus)
@@ -385,6 +553,52 @@ const loadAppointment = async () => {
     
     // 如果缺少服务名称或服务人员名称，尝试补充
     await enhanceAppointmentDetail(appointment.value)
+
+    // 加载本订单的三方互评信息
+    await loadReviewBundle(appointment.value.appointmentId)
+    
+    // 如果支付状态为"待支付"或"未知"，主动查询支付状态以触发后端自动同步
+    const paymentStatus = appointment.value.paymentStatus
+    // 检查是否为待支付状态：0、null、undefined、'unpaid'、'0' 或 NaN
+    const isUnpaid = paymentStatus === 0 || 
+                     paymentStatus === null || 
+                     paymentStatus === undefined || 
+                     paymentStatus === 'unpaid' || 
+                     paymentStatus === '0' ||
+                     (typeof paymentStatus === 'string' && paymentStatus.trim() === '') ||
+                     (typeof paymentStatus === 'number' && isNaN(paymentStatus))
+    
+    if (isUnpaid && appointment.value.appointmentId) {
+      try {
+        // 调用支付状态查询接口，触发后端自动同步支付宝状态
+        await queryPaymentStatusByAppointment(appointment.value.appointmentId)
+        // 同步后重新加载预约详情以获取最新状态
+        const refreshResponse = await getAppointmentDetail(appointmentId)
+        const refreshData = refreshResponse.data?.data || refreshResponse.data
+        if (refreshData) {
+          // 更新整个预约对象，确保所有字段都是最新的
+          const newPaymentStatus = refreshData.paymentStatus !== undefined && refreshData.paymentStatus !== null 
+            ? (typeof refreshData.paymentStatus === 'string' ? parseInt(refreshData.paymentStatus, 10) : refreshData.paymentStatus)
+            : (refreshData.payment_status !== undefined && refreshData.payment_status !== null 
+              ? (typeof refreshData.payment_status === 'string' ? parseInt(refreshData.payment_status, 10) : refreshData.payment_status)
+              : 0)
+          
+          const oldPaymentStatus = appointment.value.paymentStatus
+          appointment.value.paymentStatus = newPaymentStatus
+          
+          // 如果支付状态已更新为已支付，提示用户
+          if (newPaymentStatus === 1 && oldPaymentStatus !== 1) {
+            ElMessage.success('支付状态已更新：订单已支付')
+          } else if (newPaymentStatus === 0 && oldPaymentStatus !== 0) {
+            // 如果状态从其他值变为待支付，也更新显示
+            console.debug('支付状态已同步为待支付')
+          }
+        }
+      } catch (error) {
+        // 静默处理错误，不影响页面正常显示
+        console.debug('自动同步支付状态失败:', error)
+      }
+    }
     
     // 如果是待支付或支付中状态，启动轮询（使用数字状态码判断）
     const status = appointment.value.status
@@ -438,6 +652,38 @@ const enhanceAppointmentDetail = async (appointment) => {
   } catch (error) {
     // 捕获所有未预期的错误，静默处理
     console.debug('增强预约详情失败:', error.message)
+  }
+}
+
+// 加载三方评价包（顾客视角）
+const loadReviewBundle = async (appointmentId) => {
+  if (!appointmentId) return
+  // 兼容老版本：如果后端或前端还未提供 getAppointmentReviewBundle，则直接跳过，不影响详情页
+  const fn = reviewsApi.getAppointmentReviewBundle
+  if (typeof fn !== 'function') {
+    return
+  }
+  try {
+    const res = await fn(appointmentId)
+    const payload = res.data?.data || res.data || {}
+    const normalize = (r) => {
+      if (!r) return null
+      return {
+        overallRating: r.overallRating ?? r.rating ?? r.overall_rating ?? null,
+        serviceAttitudeRating: r.serviceAttitudeRating ?? r.service_attitude_rating ?? null,
+        professionalAbilityRating: r.professionalAbilityRating ?? r.professional_ability_rating ?? null,
+        serviceQualityRating: r.serviceQualityRating ?? r.service_quality_rating ?? null,
+        reviewContent: r.reviewContent ?? r.content ?? r.review_content ?? '',
+        reviewTime: r.createTime ?? r.createdAt ?? r.created_at ?? r.reviewTime ?? ''
+      }
+    }
+    customerReviewBlock.value = normalize(payload.customerReview)
+    staffSelfReviewBlock.value = normalize(payload.staffSelfReview)
+    adminReviewForCustomerBlock.value = normalize(payload.adminReviewForCustomer)
+    adminReviewForStaffBlock.value = normalize(payload.adminReviewForStaff)
+  } catch (e) {
+    // 不影响主详情展示，静默记录错误
+    console.error('加载三方评价包失败:', e)
   }
 }
 

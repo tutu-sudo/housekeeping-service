@@ -36,8 +36,8 @@
                   
                   <el-form-item label="性别" prop="gender">
                     <el-radio-group v-model="profileForm.gender">
-                      <el-radio :label="1">男</el-radio>
-                      <el-radio :label="0">女</el-radio>
+                      <el-radio :value="1">男</el-radio>
+                      <el-radio :value="0">女</el-radio>
                     </el-radio-group>
                   </el-form-item>
                   
@@ -393,6 +393,12 @@ const handleAvatarSuccess = async (response) => {
       // 更新头像到后端
       await updateStaffAvatar(avatarUrl)
       profileForm.avatar = avatarUrl
+      // 同步更新全局用户信息中的头像，导航栏也会一起更新
+      const currentUserInfo = store.getters['user/userInfo'] || {}
+      store.dispatch('user/updateUserInfo', {
+        ...currentUserInfo,
+        avatar: avatarUrl
+      })
     ElMessage.success('头像上传成功')
     } catch (error) {
       ElMessage.error(error.response?.data?.message || '头像更新失败')
@@ -433,11 +439,46 @@ const saveBasicInfo = async () => {
 const saveResume = async () => {
   saving.value = true
   try {
-    await updateStaffResume(staffId.value, resumeForm)
+    // 将前端字段名映射为后端期望的字段名
+    // 前端：bio, workExperience, skills
+    // 后端：bio, workExperienceText, professionalSkills
+    const resumeData = {
+      bio: resumeForm.bio || '',
+      workExperienceText: resumeForm.workExperience || '',
+      professionalSkills: resumeForm.skills || ''
+    }
+    
+    // 调试日志（开发环境）
+    if (import.meta.env.DEV) {
+      console.log('UserProfileView - 准备保存的简历数据:', resumeData)
+    }
+    
+    // updateStaffResume 只接受一个 data 参数，不需要 staffId（后端从 token 中获取）
+    const response = await updateStaffResume(resumeData)
+    
+    // 调试日志（开发环境）
+    if (import.meta.env.DEV) {
+      console.log('UserProfileView - 保存简历响应:', response)
+    }
+    
     ElMessage.success('简历保存成功')
     await loadStaffInfo()
   } catch (error) {
-    ElMessage.error(error.response?.data?.message || '保存失败')
+    console.error('保存简历失败:', error)
+    // 详细错误信息
+    if (import.meta.env.DEV) {
+      console.error('保存简历错误详情:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        statusText: error.response?.statusText
+      })
+    }
+    const errorMessage = error.response?.data?.message || 
+      error.response?.data?.error || 
+      error.message || 
+      '保存失败，请检查网络连接或联系管理员'
+    ElMessage.error(errorMessage)
   } finally {
     saving.value = false
   }
@@ -670,11 +711,11 @@ const updateUserInfoInStore = async () => {
     if (data) {
       const staffInfo = data.staff || data
       const userInfo = data.user || {}
+      const currentUserInfo = store.getters['user/userInfo'] || {}
       
       // 调试：打印验证信息
       if (import.meta.env.DEV) {
         const staffUserId = staffInfo.userId || staffInfo.user_id
-        const currentUserInfo = store.getters['user/userInfo']
         const currentUserId = currentUserInfo?.id || staffId.value
         console.log('updateUserInfoInStore - Staff信息:', staffInfo)
         console.log('updateUserInfoInStore - Staff姓名:', staffInfo.name)
@@ -682,16 +723,17 @@ const updateUserInfoInStore = async () => {
         console.log('updateUserInfoInStore - 当前用户ID:', currentUserId)
       }
       
-      // 更新store中的userInfo，添加name字段
-      if (currentUserInfo && staffInfo.name) {
+      // 更新store中的userInfo：同步姓名和头像等关键信息
         store.dispatch('user/updateUserInfo', {
           ...currentUserInfo,
-          name: staffInfo.name
+        name: staffInfo.name || currentUserInfo.name || userInfo.name || userInfo.username,
+        avatar: userInfo.avatar || staffInfo.avatar || currentUserInfo.avatar,
+        phone: userInfo.phone || staffInfo.phone || currentUserInfo.phone,
+        email: userInfo.email || staffInfo.email || currentUserInfo.email
         })
         
         if (import.meta.env.DEV) {
-          console.log('updateUserInfoInStore - 已更新userInfo.name为:', staffInfo.name)
-        }
+        console.log('updateUserInfoInStore - 已同步store中的用户姓名与头像')
       }
     }
   } catch (error) {

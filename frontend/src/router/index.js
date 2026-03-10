@@ -18,7 +18,10 @@ const OrderManagementView = () => import('@/views/admin/OrderManagementView.vue'
 const VerificationView = () => import('@/views/admin/VerificationView.vue')
 const ServiceTypeManagementView = () => import('@/views/admin/ServiceTypeManagementView.vue')
 const ServiceItemManagementView = () => import('@/views/admin/ServiceItemManagementView.vue')
+const ServiceContentManagementView = () => import('@/views/admin/ServiceContentManagementView.vue')
 const ScheduleManagementView = () => import('@/views/admin/ScheduleManagementView.vue')
+const StaffCertificateAuditView = () => import('@/views/admin/StaffCertificateAuditView.vue')
+const StaffStatusMonitorView = () => import('@/views/admin/StaffStatusMonitorView.vue')
 const ReviewManagementView = () => import('@/views/admin/ReviewManagementView.vue')
 const PaymentManagementView = () => import('@/views/admin/PaymentManagementView.vue')
 const CompanyManagementView = () => import('@/views/admin/CompanyManagementView.vue')
@@ -80,6 +83,12 @@ const routes = [
     path: '/service/detail',
     name: 'ServiceDetail',
     component: () => import('@/views/customer/ServiceDetailView.vue'),
+    meta: { requiresAuth: false }
+  },
+  {
+    path: '/service/annual-package',
+    name: 'AnnualPackage',
+    component: () => import('@/views/customer/AnnualPackageView.vue'),
     meta: { requiresAuth: false }
   },
   {
@@ -173,9 +182,27 @@ const routes = [
     meta: { requiresAuth: true, role: ['admin'] }
   },
   {
+    path: '/admin/services/content',
+    name: 'ServiceContentManagement',
+    component: ServiceContentManagementView,
+    meta: { requiresAuth: true, role: ['admin'] }
+  },
+  {
     path: '/admin/verification',
     name: 'Verification',
     component: VerificationView,
+    meta: { requiresAuth: true, role: ['admin'] }
+  },
+  {
+    path: '/admin/staff/certificates',
+    name: 'StaffCertificateAudit',
+    component: StaffCertificateAuditView,
+    meta: { requiresAuth: true, role: ['admin'] }
+  },
+  {
+    path: '/admin/staff/status',
+    name: 'StaffStatusMonitor',
+    component: StaffStatusMonitorView,
     meta: { requiresAuth: true, role: ['admin'] }
   },
   {

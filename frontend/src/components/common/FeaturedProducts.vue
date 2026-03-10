@@ -125,11 +125,41 @@ const products = ref([
   }
 ])
 
+// 服务名称映射
+const serviceNameMap = {
+  1: '日常保洁',
+  2: '管道疏通',
+  3: '健康辅助',
+  4: '专业版星级包年·乐享生活4H'
+}
+
 const handleBook = (product) => {
-  router.push({
-    path: '/appointment',
-    query: { serviceId: product.id }
-  })
+  try {
+    // 专业版星级包年服务跳转到专门的详情页
+    if (product.id === 4) {
+      router.push({
+        path: '/service/annual-package'
+      }).catch(err => {
+        console.error('Navigation to annual package failed:', err)
+        // 如果路由跳转失败，尝试使用 replace
+        router.replace({
+          path: '/service/annual-package'
+        })
+      })
+      return
+    }
+    
+    // 其他服务跳转到预约页面，传递服务名称
+    const serviceName = serviceNameMap[product.id] || product.title
+    router.push({
+      path: '/appointment',
+      query: { serviceName: serviceName }
+    }).catch(err => {
+      console.error('Navigation to appointment failed:', err)
+    })
+  } catch (error) {
+    console.error('handleBook error:', error)
+  }
 }
 
 const viewMore = () => {

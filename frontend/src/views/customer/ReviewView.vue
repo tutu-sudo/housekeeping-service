@@ -149,8 +149,22 @@ const loadAppointment = async () => {
     
     // 检查预约状态是否为已完成
     const status = data.status !== undefined && data.status !== null ? data.status : 0
-    if (status !== 3 && status !== 'completed') {
+    const statusNum = typeof status === 'string' ? parseInt(status, 10) : status
+    if (statusNum !== 3 && status !== 'completed') {
       ElMessage.warning('只有已完成的预约才能进行评价')
+      router.push('/profile')
+      return
+    }
+    
+    // 检查支付状态：必须是已支付才能评价
+    const paymentStatus = data.paymentStatus !== undefined && data.paymentStatus !== null 
+      ? (typeof data.paymentStatus === 'string' ? parseInt(data.paymentStatus, 10) : data.paymentStatus)
+      : (data.payment_status !== undefined && data.payment_status !== null 
+        ? (typeof data.payment_status === 'string' ? parseInt(data.payment_status, 10) : data.payment_status)
+        : 0)
+    
+    if (paymentStatus !== 1 && paymentStatus !== 'paid' && paymentStatus !== 'success') {
+      ElMessage.warning('订单未支付，无法评价')
       router.push('/profile')
       return
     }
@@ -176,7 +190,9 @@ const loadAppointment = async () => {
       startTime: data.startTime || data.start_time || null,
       endTime: data.endTime || data.end_time || null,
       // 处理状态
-      status: status,
+      status: statusNum,
+      // 处理支付状态
+      paymentStatus: paymentStatus,
       // 其他字段
       serviceAddress: data.serviceAddress || data.service_address || null,
       specialRequirements: data.specialRequirements || data.special_requirements || data.notes || null,
@@ -243,8 +259,21 @@ const submitReview = async () => {
         })
       } catch (error) {
         console.error('评价提交失败:', error)
+        const errorCode = error.response?.data?.code
         const errorMsg = error.response?.data?.message || error.message || '评价提交失败，请重试'
-        ElMessage.error(errorMsg)
+        
+        // 处理后端返回的特定错误码
+        if (errorCode === 3103) {
+          // 订单未支付，无法评价
+          ElMessage.error('订单未支付，无法评价')
+          router.push('/profile')
+        } else if (errorCode === 3003) {
+          // 只有已完成的订单才能评价
+          ElMessage.error('只有已完成的订单才能评价')
+          router.push('/profile')
+        } else {
+          ElMessage.error(errorMsg)
+        }
       } finally {
         submitting.value = false
       }

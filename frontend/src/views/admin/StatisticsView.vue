@@ -545,11 +545,11 @@ onMounted(async () => {
 <style scoped lang="scss">
 .statistics-view {
   min-height: 100vh;
-  background-color: #f0f2f5;
+  background-color: #f5f7fa;
 }
 
 .content {
-  padding: 20px;
+  padding: 0;
 }
 
 .page-header {

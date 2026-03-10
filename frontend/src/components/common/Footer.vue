@@ -16,13 +16,14 @@
         <div class="qr-codes">
           <div class="qr-item">
             <div class="qr-code">
-              <img src="https://via.placeholder.com/120x120/4CAF50/FFFFFF?text=APP" alt="APP二维码" />
+            <!-- 使用本地占位图，避免外网DNS解析失败 -->
+            <div class="qrcode-placeholder">APP</div>
             </div>
             <p>下载三替好生活APP</p>
           </div>
           <div class="qr-item">
             <div class="qr-code">
-              <img src="https://via.placeholder.com/120x120/4CAF50/FFFFFF?text=微信" alt="微信二维码" />
+            <div class="qrcode-placeholder">微信</div>
             </div>
             <p>微信公众号</p>
           </div>
@@ -185,11 +186,17 @@ const scrollToTop = () => {
         padding: 5px;
         border-radius: 4px;
         margin: 0 auto 10px;
-        
-        img {
+
+        .qrcode-placeholder {
           width: 100%;
           height: 100%;
-          object-fit: contain;
+          border-radius: 4px;
+          background: #4CAF50;
+          color: #fff;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 16px;
         }
       }
       

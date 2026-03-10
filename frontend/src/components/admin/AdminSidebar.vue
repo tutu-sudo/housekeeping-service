@@ -27,8 +27,8 @@
           <el-icon><Setting /></el-icon>
           <span>服务管理</span>
         </template>
-        <el-menu-item index="/admin/services/types">服务类型</el-menu-item>
-        <el-menu-item index="/admin/services/items">服务项目</el-menu-item>
+        <el-menu-item index="/admin/services/items">服务项目管理</el-menu-item>
+        <el-menu-item index="/admin/services/content">服务内容管理</el-menu-item>
       </el-sub-menu>
       
       <el-sub-menu index="staff">
@@ -36,14 +36,19 @@
           <el-icon><UserFilled /></el-icon>
           <span>人员管理</span>
         </template>
-        <el-menu-item index="/admin/verification">人员审核</el-menu-item>
-        <el-menu-item index="/admin/schedules">排班管理</el-menu-item>
+        <el-menu-item index="/admin/verification">服务人员审核</el-menu-item>
+        <el-menu-item index="/admin/staff/certificates">资质信息管理</el-menu-item>
+        <el-menu-item index="/admin/staff/status">人员状态监控</el-menu-item>
       </el-sub-menu>
-      
-      <el-menu-item index="/admin/reviews">
-        <el-icon><ChatLineRound /></el-icon>
-        <span>评价管理</span>
-      </el-menu-item>
+
+      <el-sub-menu index="reviews">
+        <template #title>
+          <el-icon><ChatLineRound /></el-icon>
+          <span>评价管理</span>
+        </template>
+        <el-menu-item index="/admin/reviews?reviewerRole=1">顾客评价</el-menu-item>
+        <el-menu-item index="/admin/reviews?reviewerRole=2">员工自评</el-menu-item>
+      </el-sub-menu>
       
       <el-menu-item index="/admin/companies">
         <el-icon><OfficeBuilding /></el-icon>
@@ -81,9 +86,17 @@ const activeMenu = computed(() => {
   if (path.startsWith('/admin/payments')) return '/admin/payments'
   if (path.startsWith('/admin/services/types')) return '/admin/services/types'
   if (path.startsWith('/admin/services/items')) return '/admin/services/items'
+  if (path.startsWith('/admin/services/content')) return '/admin/services/content'
   if (path.startsWith('/admin/verification')) return '/admin/verification'
-  if (path.startsWith('/admin/schedules')) return '/admin/schedules'
-  if (path.startsWith('/admin/reviews')) return '/admin/reviews'
+  if (path.startsWith('/admin/staff/certificates')) return '/admin/staff/certificates'
+  if (path.startsWith('/admin/staff/status')) return '/admin/staff/status'
+  if (path.startsWith('/admin/reviews')) {
+    // 评价管理需要根据 query 高亮不同子菜单
+    const reviewerRole = String(route.query?.reviewerRole || '')
+    if (reviewerRole === '2') return '/admin/reviews?reviewerRole=2'
+    // 默认高亮“顾客评价”
+    return '/admin/reviews?reviewerRole=1'
+  }
   if (path.startsWith('/admin/companies')) return '/admin/companies'
   if (path.startsWith('/admin/statistics')) return '/admin/statistics'
   return path

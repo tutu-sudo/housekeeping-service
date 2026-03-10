@@ -53,6 +53,12 @@
                 <el-descriptions-item label="服务人员">
                   {{ appointmentData.staffName }}
                 </el-descriptions-item>
+              <el-descriptions-item label="客户姓名">
+                {{ appointmentData.customerName }}
+              </el-descriptions-item>
+              <el-descriptions-item label="联系方式">
+                {{ appointmentData.customerPhone }}
+              </el-descriptions-item>
                 <el-descriptions-item label="预约日期">
                   {{ appointmentData.appointmentDate }}
                 </el-descriptions-item>
@@ -145,7 +151,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { useStore } from 'vuex'
 import { ElMessage } from 'element-plus'
@@ -172,6 +178,8 @@ const appointmentData = reactive({
   serviceName: '',
   staffId: '',
   staffName: '',
+  customerName: '',
+  customerPhone: '',
   appointmentDate: '',
   startTime: '',
   endTime: '',
@@ -198,6 +206,26 @@ const handleStaffSelected = (staff) => {
   selectedStaff.value = staff
   appointmentData.staffId = staff.staffId || staff.staff_id || staff.id
     appointmentData.staffName = staff.name
+}
+
+// 在离开预约页面前，把当前填写内容临时保存到 sessionStorage
+const saveAppointmentDraft = () => {
+  try {
+    const formSnapshot = appointmentFormRef.value?.form
+      ? { ...appointmentFormRef.value.form }
+      : null
+    const draft = {
+      currentStep: currentStep.value,
+      appointmentData: { ...appointmentData },
+      filterConditions: { ...filterConditions.value },
+      selectedStaff: selectedStaff.value,
+      form: formSnapshot
+    }
+    sessionStorage.setItem('appointmentDraft', JSON.stringify(draft))
+  } catch (e) {
+    // 存草稿失败不影响主流程
+    console.warn('保存预约草稿失败:', e)
+  }
 }
 
 const handleFormSubmit = async (formData) => {
@@ -263,7 +291,9 @@ const confirmAppointment = async () => {
       appointmentDate: appointmentData.appointmentDate,
       startTime: normalizeTime(appointmentData.startTime),
       serviceAddress: appointmentData.serviceAddress,
-      specialRequirements: appointmentData.specialRequirements || null
+      specialRequirements: appointmentData.specialRequirements || null,
+      customerName: appointmentData.customerName,
+      customerPhone: appointmentData.customerPhone
     }
     
     if (customerId.value) {
@@ -334,13 +364,141 @@ const goToSelectedStaffDetail = () => {
   const staff = selectedStaff.value
   const staffId = staff.staffId || staff.staff_id || staff.id
   if (!staffId) return
+  // 先保存当前预约草稿，返回时可以恢复
+  saveAppointmentDraft()
   router.push({
     path: `/housekeeper/${staffId}`,
     query: {
-      staff: encodeURIComponent(JSON.stringify(staff))
+      staff: encodeURIComponent(JSON.stringify(staff)),
+      from: 'appointment'
     }
   })
 }
+
+// 进入预约页时，如果有草稿并且带有 restore 标记，则恢复上一次填写内容；
+// 否则，如果路由中带有 staff / service 信息，则进行预填充。
+onMounted(async () => {
+  const restore = route.query.restore === '1'
+  const draftStr = sessionStorage.getItem('appointmentDraft')
+
+  if (restore && draftStr) {
+    try {
+      const draft = JSON.parse(draftStr)
+      if (draft) {
+        currentStep.value = draft.currentStep ?? 0
+        Object.assign(appointmentData, draft.appointmentData || {})
+        filterConditions.value = draft.filterConditions || {}
+        selectedStaff.value = draft.selectedStaff || null
+
+        // 等待子组件加载完成后再恢复表单数据
+        await new Promise(resolve => {
+          const checkInterval = setInterval(() => {
+            if (appointmentFormRef.value) {
+              clearInterval(checkInterval)
+              resolve()
+            }
+          }, 50)
+          // 最多等待2秒
+          setTimeout(() => {
+            clearInterval(checkInterval)
+            resolve()
+          }, 2000)
+        })
+
+        if (draft.form && appointmentFormRef.value) {
+          Object.assign(appointmentFormRef.value.form, draft.form)
+          // 如果恢复了服务项目，需要触发服务变更逻辑
+          if (draft.form.serviceId) {
+            appointmentFormRef.value.form.serviceId = draft.form.serviceId
+            // 等待服务列表加载完成
+            if (appointmentFormRef.value.loadServices) {
+              await appointmentFormRef.value.loadServices()
+            }
+            // 触发服务变更，加载对应的服务人员
+            if (appointmentFormRef.value.handleServiceChange) {
+              appointmentFormRef.value.handleServiceChange()
+            }
+          }
+          // 恢复选中的服务人员名称
+          if (selectedStaff.value) {
+            appointmentFormRef.value.selectedStaffName = selectedStaff.value.name || ''
+          }
+        }
+        ElMessage.success('已恢复上次预约信息')
+      }
+    } catch (e) {
+      console.warn('恢复预约草稿失败:', e)
+      ElMessage.error('恢复预约信息失败')
+    } finally {
+      // 草稿只用一次，避免以后新预约误用旧数据
+      sessionStorage.removeItem('appointmentDraft')
+    }
+    return
+  }
+
+  // 没有草稿时，根据路由参数进行预填充（从"家政服务资料"立即预约跳转过来）
+  const staffStr = route.query.staff
+  if (staffStr) {
+    try {
+      const parsed = JSON.parse(decodeURIComponent(staffStr))
+      selectedStaff.value = parsed
+      appointmentData.staffId =
+        parsed.staffId || parsed.staff_id || parsed.id || appointmentData.staffId
+      appointmentData.staffName = parsed.name || appointmentData.staffName
+    } catch (e) {
+      console.warn('解析路由中的家政人员信息失败:', e)
+    }
+  }
+
+  // 等待子组件加载完成后再设置服务项目和服务人员
+  await new Promise(resolve => {
+    const checkInterval = setInterval(() => {
+      if (appointmentFormRef.value) {
+        clearInterval(checkInterval)
+        resolve()
+      }
+    }, 50)
+    setTimeout(() => {
+      clearInterval(checkInterval)
+      resolve()
+    }, 2000)
+  })
+
+  if (appointmentFormRef.value) {
+    // 设置服务项目（如果路由参数中有）
+    if (route.query.serviceId) {
+      const serviceId = Number(route.query.serviceId)
+      appointmentData.serviceId = serviceId
+      
+      // 确保服务列表已加载
+      if (appointmentFormRef.value.loadServices) {
+        await appointmentFormRef.value.loadServices()
+      }
+      
+      // 设置服务项目并触发变更
+      if (appointmentFormRef.value.form) {
+        appointmentFormRef.value.form.serviceId = serviceId
+        if (appointmentFormRef.value.handleServiceChange) {
+          appointmentFormRef.value.handleServiceChange()
+        }
+      }
+    } else {
+      // 即使没有 serviceId，也要加载服务列表（用于后续选择）
+      if (appointmentFormRef.value.loadServices) {
+        await appointmentFormRef.value.loadServices()
+      }
+    }
+
+    // 确保服务人员信息已设置（通过 watch 自动同步，这里只是确保一下）
+    if (selectedStaff.value && appointmentFormRef.value.form) {
+      const staffId = selectedStaff.value.staffId || selectedStaff.value.staff_id || selectedStaff.value.id
+      if (staffId) {
+        appointmentFormRef.value.form.staffId = staffId
+        appointmentFormRef.value.selectedStaffName = selectedStaff.value.name || ''
+      }
+    }
+  }
+})
 </script>
 
 <style scoped lang="scss">

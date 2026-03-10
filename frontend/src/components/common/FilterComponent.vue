@@ -70,7 +70,7 @@
           style="width: 100%"
           @change="handleWorkExperienceChange"
         >
-          <el-option label="不限" :value="null" />
+          <el-option label="不限" :value="''" />
           <el-option label="1年以上" :value="1" />
           <el-option label="3年以上" :value="3" />
           <el-option label="5年以上" :value="5" />
@@ -101,7 +101,7 @@
           style="width: 100%"
           @change="handleRatingChange"
         >
-          <el-option label="不限" :value="null" />
+          <el-option label="不限" :value="''" />
           <el-option label="4.0分以上" :value="4.0" />
           <el-option label="4.5分以上" :value="4.5" />
           <el-option label="4.8分以上" :value="4.8" />
@@ -157,9 +157,9 @@ const filters = ref({
   maxAge: null,
   origin: '', // 籍贯：空字符串表示"不限"
   serviceId: null, // 改为直接使用serviceId
-  workExperienceOption: null, // 工作经验选项：null表示"不限"
+  workExperienceOption: '', // 工作经验选项：空字符串表示"不限"
   minWorkExperience: 0, // 自定义工作经验
-  ratingOption: null, // 评分选项：null表示"不限"
+  ratingOption: '', // 评分选项：空字符串表示"不限"
   minRating: 0, // 自定义评分
   nameKeyword: ''
 })
@@ -270,9 +270,9 @@ const resetFilters = () => {
     maxAge: null,
     origin: '',
     serviceId: null,
-    workExperienceOption: null,
+    workExperienceOption: '',
     minWorkExperience: 0,
-    ratingOption: null,
+    ratingOption: '',
     minRating: 0,
     nameKeyword: ''
   }
