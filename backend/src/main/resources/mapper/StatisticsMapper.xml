@@ -1,0 +1,592 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="housekeeping.housekeepingnow.mapper.StatisticsMapper">
+
+    <!-- 预约统计结果映射 -->
+    <resultMap id="AppointmentStatisticsResultMap" type="housekeeping.housekeepingnow.dto.AppointmentStatisticsDTO">
+        <result column="date" property="date"/>
+        <result column="service_type_id" property="serviceTypeId"/>
+        <result column="service_type_name" property="serviceTypeName"/>
+        <result column="status" property="status"/>
+        <result column="count" property="count"/>
+        <result column="total_amount" property="totalAmount"/>
+        <result column="total_duration" property="totalDuration"/>
+    </resultMap>
+
+    <!-- 收入统计结果映射 -->
+    <resultMap id="RevenueStatisticsResultMap" type="housekeeping.housekeepingnow.dto.RevenueStatisticsDTO">
+        <result column="date" property="date"/>
+        <result column="payment_method" property="paymentMethod"/>
+        <result column="payment_status" property="paymentStatus"/>
+        <result column="success_count" property="successCount"/>
+        <result column="success_amount" property="successAmount"/>
+        <result column="refund_count" property="refundCount"/>
+        <result column="refund_amount" property="refundAmount"/>
+        <result column="net_revenue" property="netRevenue"/>
+    </resultMap>
+
+    <!-- 服务人员工作量统计结果映射 -->
+    <resultMap id="StaffWorkloadStatisticsResultMap" type="housekeeping.housekeepingnow.dto.StaffWorkloadStatisticsDTO">
+        <result column="staff_id" property="staffId"/>
+        <result column="staff_name" property="staffName"/>
+        <result column="completed_count" property="completedCount"/>
+        <result column="in_progress_count" property="inProgressCount"/>
+        <result column="total_count" property="totalCount"/>
+        <result column="total_work_hours" property="totalWorkHours"/>
+        <result column="total_revenue" property="totalRevenue"/>
+        <result column="average_rating" property="averageRating"/>
+        <result column="review_count" property="reviewCount"/>
+    </resultMap>
+
+    <!-- 顾客活跃度统计结果映射 -->
+    <resultMap id="CustomerActivityStatisticsResultMap" type="housekeeping.housekeepingnow.dto.CustomerActivityStatisticsDTO">
+        <result column="customer_id" property="customerId"/>
+        <result column="customer_name" property="customerName"/>
+        <result column="total_appointments" property="totalAppointments"/>
+        <result column="completed_appointments" property="completedAppointments"/>
+        <result column="cancelled_appointments" property="cancelledAppointments"/>
+        <result column="last_appointment_date" property="lastAppointmentDate"/>
+        <result column="first_appointment_date" property="firstAppointmentDate"/>
+        <result column="total_spent" property="totalSpent"/>
+        <result column="activity_level" property="activityLevel"/>
+    </resultMap>
+
+    <!-- 服务质量统计结果映射 -->
+    <resultMap id="ServiceQualityStatisticsResultMap" type="housekeeping.housekeepingnow.dto.ServiceQualityStatisticsDTO">
+        <result column="service_type_id" property="serviceTypeId"/>
+        <result column="service_type_name" property="serviceTypeName"/>
+        <result column="staff_id" property="staffId"/>
+        <result column="staff_name" property="staffName"/>
+        <result column="review_count" property="reviewCount"/>
+        <result column="average_overall_rating" property="averageOverallRating"/>
+        <result column="average_service_attitude_rating" property="averageServiceAttitudeRating"/>
+        <result column="average_professional_ability_rating" property="averageProfessionalAbilityRating"/>
+        <result column="average_service_quality_rating" property="averageServiceQualityRating"/>
+        <result column="good_review_count" property="goodReviewCount"/>
+        <result column="medium_review_count" property="mediumReviewCount"/>
+        <result column="bad_review_count" property="badReviewCount"/>
+        <result column="good_review_rate" property="goodReviewRate"/>
+    </resultMap>
+
+    <!-- 按日期统计预约数据 -->
+    <select id="statisticsAppointmentsByDate" resultMap="AppointmentStatisticsResultMap">
+        SELECT 
+            a.appointment_date AS date,
+            st.service_type_id,
+            st.type_name AS service_type_name,
+            a.status,
+            COUNT(*) AS count,
+            COALESCE(SUM(a.total_amount), 0) AS total_amount,
+            COALESCE(SUM(a.total_duration), 0) AS total_duration
+        FROM appointment a
+        LEFT JOIN service s ON a.service_id = s.service_id
+        LEFT JOIN service_type st ON s.service_type_id = st.service_type_id
+        <where>
+            <if test="startDate != null">AND a.appointment_date >= #{startDate}</if>
+            <if test="endDate != null">AND a.appointment_date &lt;= #{endDate}</if>
+            <if test="status != null">AND a.status = #{status}</if>
+            <if test="serviceTypeId != null">AND st.service_type_id = #{serviceTypeId}</if>
+        </where>
+        GROUP BY a.appointment_date, st.service_type_id, st.type_name, a.status
+        ORDER BY a.appointment_date DESC, st.service_type_id
+    </select>
+
+    <!-- 按服务类型统计预约数据 -->
+    <select id="statisticsAppointmentsByServiceType" resultMap="AppointmentStatisticsResultMap">
+        SELECT 
+            st.service_type_id,
+            st.type_name AS service_type_name,
+            COUNT(*) AS count,
+            COALESCE(SUM(a.total_amount), 0) AS total_amount,
+            COALESCE(SUM(a.total_duration), 0) AS total_duration
+        FROM appointment a
+        LEFT JOIN service s ON a.service_id = s.service_id
+        LEFT JOIN service_type st ON s.service_type_id = st.service_type_id
+        <where>
+            <if test="startDate != null">AND a.appointment_date >= #{startDate}</if>
+            <if test="endDate != null">AND a.appointment_date &lt;= #{endDate}</if>
+        </where>
+        GROUP BY st.service_type_id, st.type_name
+        ORDER BY count DESC
+    </select>
+
+    <!-- 按状态统计预约数据 -->
+    <select id="statisticsAppointmentsByStatus" resultMap="AppointmentStatisticsResultMap">
+        SELECT 
+            a.status,
+            COUNT(*) AS count,
+            COALESCE(SUM(a.total_amount), 0) AS total_amount,
+            COALESCE(SUM(a.total_duration), 0) AS total_duration
+        FROM appointment a
+        <where>
+            <if test="startDate != null">AND a.appointment_date >= #{startDate}</if>
+            <if test="endDate != null">AND a.appointment_date &lt;= #{endDate}</if>
+        </where>
+        GROUP BY a.status
+        ORDER BY a.status
+    </select>
+
+    <!-- 按日期统计收入数据 -->
+    <select id="statisticsRevenueByDate" resultMap="RevenueStatisticsResultMap">
+        SELECT 
+            DATE(p.payment_time) AS date,
+            p.payment_method,
+            p.payment_status,
+            SUM(CASE WHEN p.payment_status = 1 THEN 1 ELSE 0 END) AS success_count,
+            SUM(CASE WHEN p.payment_status = 1 THEN p.payment_amount ELSE 0 END) AS success_amount,
+            SUM(CASE WHEN p.payment_status = 3 THEN 1 ELSE 0 END) AS refund_count,
+            SUM(CASE WHEN p.payment_status = 3 THEN p.payment_amount ELSE 0 END) AS refund_amount,
+            SUM(CASE WHEN p.payment_status = 1 THEN p.payment_amount ELSE 0 END) - 
+            SUM(CASE WHEN p.payment_status = 3 THEN p.payment_amount ELSE 0 END) AS net_revenue
+        FROM payment p
+        <where>
+            <if test="startDate != null">AND DATE(p.payment_time) >= #{startDate}</if>
+            <if test="endDate != null">AND DATE(p.payment_time) &lt;= #{endDate}</if>
+            <if test="paymentMethod != null and paymentMethod != ''">AND p.payment_method = #{paymentMethod}</if>
+        </where>
+        GROUP BY DATE(p.payment_time), p.payment_method, p.payment_status
+        ORDER BY date DESC
+    </select>
+
+    <!-- 按支付方式统计收入数据 -->
+    <select id="statisticsRevenueByPaymentMethod" resultMap="RevenueStatisticsResultMap">
+        SELECT 
+            p.payment_method,
+            SUM(CASE WHEN p.payment_status = 1 THEN 1 ELSE 0 END) AS success_count,
+            SUM(CASE WHEN p.payment_status = 1 THEN p.payment_amount ELSE 0 END) AS success_amount,
+            SUM(CASE WHEN p.payment_status = 3 THEN 1 ELSE 0 END) AS refund_count,
+            SUM(CASE WHEN p.payment_status = 3 THEN p.payment_amount ELSE 0 END) AS refund_amount,
+            SUM(CASE WHEN p.payment_status = 1 THEN p.payment_amount ELSE 0 END) - 
+            SUM(CASE WHEN p.payment_status = 3 THEN p.payment_amount ELSE 0 END) AS net_revenue
+        FROM payment p
+        <where>
+            <if test="startDate != null">AND DATE(p.payment_time) >= #{startDate}</if>
+            <if test="endDate != null">AND DATE(p.payment_time) &lt;= #{endDate}</if>
+        </where>
+        GROUP BY p.payment_method
+        ORDER BY net_revenue DESC
+    </select>
+
+    <!-- 统计服务人员工作量 -->
+    <select id="statisticsStaffWorkload" resultMap="StaffWorkloadStatisticsResultMap">
+        SELECT 
+            s.staff_id,
+            s.name AS staff_name,
+            SUM(CASE WHEN a.status = 3 THEN 1 ELSE 0 END) AS completed_count,
+            SUM(CASE WHEN a.status = 2 THEN 1 ELSE 0 END) AS in_progress_count,
+            COUNT(*) AS total_count,
+            COALESCE(SUM(a.total_duration), 0) AS total_work_hours,
+            COALESCE(SUM(CASE WHEN a.status = 3 THEN a.total_amount ELSE 0 END), 0) AS total_revenue,
+            COALESCE(AVG(r.overall_rating), 0) AS average_rating,
+            COUNT(DISTINCT r.review_id) AS review_count
+        FROM staff s
+        LEFT JOIN appointment a ON s.staff_id = a.staff_id
+        LEFT JOIN review r ON a.appointment_id = r.appointment_id
+        <where>
+            <if test="startDate != null">AND a.appointment_date >= #{startDate}</if>
+            <if test="endDate != null">AND a.appointment_date &lt;= #{endDate}</if>
+            <if test="staffId != null">AND s.staff_id = #{staffId}</if>
+        </where>
+        GROUP BY s.staff_id, s.name
+        HAVING total_count > 0
+        ORDER BY total_count DESC
+    </select>
+
+    <!-- 统计顾客活跃度 -->
+    <select id="statisticsCustomerActivity" resultMap="CustomerActivityStatisticsResultMap">
+        SELECT 
+            cd.customer_id,
+            cd.name AS customer_name,
+            COUNT(*) AS total_appointments,
+            SUM(CASE WHEN a.status = 3 THEN 1 ELSE 0 END) AS completed_appointments,
+            SUM(CASE WHEN a.status = 4 THEN 1 ELSE 0 END) AS cancelled_appointments,
+            MAX(a.appointment_date) AS last_appointment_date,
+            MIN(a.appointment_date) AS first_appointment_date,
+            COALESCE(SUM(CASE WHEN a.status = 3 THEN a.total_amount ELSE 0 END), 0) AS total_spent,
+            CASE 
+                WHEN COUNT(*) >= 10 AND COALESCE(SUM(CASE WHEN a.status = 3 THEN a.total_amount ELSE 0 END), 0) >= 5000 THEN '高活跃'
+                WHEN COUNT(*) >= 5 AND COALESCE(SUM(CASE WHEN a.status = 3 THEN a.total_amount ELSE 0 END), 0) >= 2000 THEN '中活跃'
+                ELSE '低活跃'
+            END AS activity_level
+        FROM customer_detail cd
+        LEFT JOIN appointment a ON cd.customer_id = a.customer_id
+        <where>
+            <if test="startDate != null">AND a.appointment_date >= #{startDate}</if>
+            <if test="endDate != null">AND a.appointment_date &lt;= #{endDate}</if>
+            <if test="customerId != null">AND cd.customer_id = #{customerId}</if>
+        </where>
+        GROUP BY cd.customer_id, cd.name
+        HAVING total_appointments > 0
+        ORDER BY total_appointments DESC, total_spent DESC
+    </select>
+
+    <!-- 统计服务质量（按服务类型） -->
+    <select id="statisticsServiceQualityByType" resultMap="ServiceQualityStatisticsResultMap">
+        SELECT 
+            st.service_type_id,
+            st.type_name AS service_type_name,
+            COUNT(r.review_id) AS review_count,
+            COALESCE(AVG(r.overall_rating), 0) AS average_overall_rating,
+            COALESCE(AVG(r.service_attitude_rating), 0) AS average_service_attitude_rating,
+            COALESCE(AVG(r.professional_ability_rating), 0) AS average_professional_ability_rating,
+            COALESCE(AVG(r.service_quality_rating), 0) AS average_service_quality_rating,
+            SUM(CASE WHEN r.overall_rating >= 4.5 THEN 1 ELSE 0 END) AS good_review_count,
+            SUM(CASE WHEN r.overall_rating >= 3.0 AND r.overall_rating &lt; 4.5 THEN 1 ELSE 0 END) AS medium_review_count,
+            SUM(CASE WHEN r.overall_rating &lt; 3.0 THEN 1 ELSE 0 END) AS bad_review_count,
+            CASE 
+                WHEN COUNT(r.review_id) > 0 THEN 
+                    ROUND(SUM(CASE WHEN r.overall_rating >= 4.5 THEN 1 ELSE 0 END) * 100.0 / COUNT(r.review_id), 2)
+                ELSE 0 
+            END AS good_review_rate
+        FROM service_type st
+        LEFT JOIN service s ON st.service_type_id = s.service_type_id
+        LEFT JOIN appointment a ON s.service_id = a.service_id
+        LEFT JOIN review r ON a.appointment_id = r.appointment_id
+        <where>
+            <if test="startDate != null">AND a.appointment_date >= #{startDate}</if>
+            <if test="endDate != null">AND a.appointment_date &lt;= #{endDate}</if>
+            <if test="serviceTypeId != null">AND st.service_type_id = #{serviceTypeId}</if>
+        </where>
+        GROUP BY st.service_type_id, st.type_name
+        HAVING review_count > 0
+        ORDER BY average_overall_rating DESC
+    </select>
+
+    <!-- 统计服务质量（按服务人员） -->
+    <select id="statisticsServiceQualityByStaff" resultMap="ServiceQualityStatisticsResultMap">
+        SELECT 
+            s.staff_id,
+            s.name AS staff_name,
+            COUNT(r.review_id) AS review_count,
+            COALESCE(AVG(r.overall_rating), 0) AS average_overall_rating,
+            COALESCE(AVG(r.service_attitude_rating), 0) AS average_service_attitude_rating,
+            COALESCE(AVG(r.professional_ability_rating), 0) AS average_professional_ability_rating,
+            COALESCE(AVG(r.service_quality_rating), 0) AS average_service_quality_rating,
+            SUM(CASE WHEN r.overall_rating >= 4.5 THEN 1 ELSE 0 END) AS good_review_count,
+            SUM(CASE WHEN r.overall_rating >= 3.0 AND r.overall_rating &lt; 4.5 THEN 1 ELSE 0 END) AS medium_review_count,
+            SUM(CASE WHEN r.overall_rating &lt; 3.0 THEN 1 ELSE 0 END) AS bad_review_count,
+            CASE 
+                WHEN COUNT(r.review_id) > 0 THEN 
+                    ROUND(SUM(CASE WHEN r.overall_rating >= 4.5 THEN 1 ELSE 0 END) * 100.0 / COUNT(r.review_id), 2)
+                ELSE 0 
+            END AS good_review_rate
+        FROM staff s
+        LEFT JOIN appointment a ON s.staff_id = a.staff_id
+        LEFT JOIN review r ON a.appointment_id = r.appointment_id
+        <where>
+            <if test="startDate != null">AND a.appointment_date >= #{startDate}</if>
+            <if test="endDate != null">AND a.appointment_date &lt;= #{endDate}</if>
+            <if test="staffId != null">AND s.staff_id = #{staffId}</if>
+        </where>
+        GROUP BY s.staff_id, s.name
+        HAVING review_count > 0
+        ORDER BY average_overall_rating DESC
+    </select>
+
+    <!-- 获取最近N天预约趋势 -->
+    <select id="getAppointmentTrend" resultMap="AppointmentStatisticsResultMap">
+        SELECT 
+            a.appointment_date AS date,
+            COUNT(*) AS count,
+            COALESCE(SUM(a.total_amount), 0) AS total_amount
+        FROM appointment a
+        WHERE a.appointment_date >= DATE_SUB(CURDATE(), INTERVAL #{days} DAY)
+        GROUP BY a.appointment_date
+        ORDER BY a.appointment_date ASC
+    </select>
+
+    <!-- 获取最近N天收入趋势 -->
+    <select id="getRevenueTrend" resultMap="RevenueStatisticsResultMap">
+        SELECT 
+            DATE(p.payment_time) AS date,
+            SUM(CASE WHEN p.payment_status = 1 THEN p.payment_amount ELSE 0 END) AS success_amount,
+            SUM(CASE WHEN p.payment_status = 3 THEN p.payment_amount ELSE 0 END) AS refund_amount,
+            SUM(CASE WHEN p.payment_status = 1 THEN p.payment_amount ELSE 0 END) - 
+            SUM(CASE WHEN p.payment_status = 3 THEN p.payment_amount ELSE 0 END) AS net_revenue
+        FROM payment p
+        WHERE DATE(p.payment_time) >= DATE_SUB(CURDATE(), INTERVAL #{days} DAY)
+        GROUP BY DATE(p.payment_time)
+        ORDER BY date ASC
+    </select>
+
+    <!-- 获取热门服务类型TopN -->
+    <select id="getTopServiceTypes" resultMap="AppointmentStatisticsResultMap">
+        SELECT 
+            st.service_type_id,
+            st.type_name AS service_type_name,
+            COUNT(*) AS count,
+            COALESCE(SUM(a.total_amount), 0) AS total_amount
+        FROM appointment a
+        LEFT JOIN service s ON a.service_id = s.service_id
+        LEFT JOIN service_type st ON s.service_type_id = st.service_type_id
+        <where>
+            <if test="startDate != null">AND a.appointment_date >= #{startDate}</if>
+            <if test="endDate != null">AND a.appointment_date &lt;= #{endDate}</if>
+        </where>
+        GROUP BY st.service_type_id, st.type_name
+        ORDER BY count DESC
+        LIMIT #{limit}
+    </select>
+
+    <!-- 获取服务人员工作量TopN -->
+    <select id="getTopStaff" resultMap="StaffWorkloadStatisticsResultMap">
+        SELECT 
+            s.staff_id,
+            s.name AS staff_name,
+            SUM(CASE WHEN a.status = 3 THEN 1 ELSE 0 END) AS completed_count,
+            COUNT(*) AS total_count,
+            COALESCE(SUM(a.total_duration), 0) AS total_work_hours,
+            COALESCE(SUM(CASE WHEN a.status = 3 THEN a.total_amount ELSE 0 END), 0) AS total_revenue,
+            COALESCE(AVG(r.overall_rating), 0) AS average_rating
+        FROM staff s
+        LEFT JOIN appointment a ON s.staff_id = a.staff_id
+        LEFT JOIN review r ON a.appointment_id = r.appointment_id
+        <where>
+            <if test="startDate != null">AND a.appointment_date >= #{startDate}</if>
+            <if test="endDate != null">AND a.appointment_date &lt;= #{endDate}</if>
+        </where>
+        GROUP BY s.staff_id, s.name
+        HAVING total_count > 0
+        ORDER BY completed_count DESC, total_revenue DESC
+        LIMIT #{limit}
+    </select>
+
+    <!-- 根据用户类型统计用户数量 -->
+    <select id="countUsersByType" resultType="java.lang.Long">
+        SELECT COUNT(*) 
+        FROM user 
+        WHERE user_type = #{userType} AND status = 1
+    </select>
+
+    <!-- 获取收入趋势数据（按日期） -->
+    <select id="getRevenueTrendByDate" resultType="java.util.Map">
+        SELECT 
+            DATE(p.payment_time) AS date,
+            COALESCE(SUM(CASE WHEN p.payment_status = 1 THEN p.payment_amount ELSE 0 END), 0) AS amount
+        FROM payment p
+        <where>
+            <if test="startDate != null">AND DATE(p.payment_time) >= #{startDate}</if>
+            <if test="endDate != null">AND DATE(p.payment_time) &lt;= #{endDate}</if>
+        </where>
+        GROUP BY DATE(p.payment_time)
+        ORDER BY date ASC
+    </select>
+
+    <!-- 获取客户活跃度趋势数据（按日期） -->
+    <select id="getCustomerActivityTrendByDate" resultType="java.util.Map">
+        SELECT 
+            DATE(a.appointment_date) AS date,
+            COUNT(DISTINCT a.customer_id) AS count
+        FROM appointment a
+        <where>
+            <if test="startDate != null">AND DATE(a.appointment_date) >= #{startDate}</if>
+            <if test="endDate != null">AND DATE(a.appointment_date) &lt;= #{endDate}</if>
+        </where>
+        GROUP BY DATE(a.appointment_date)
+        ORDER BY date ASC
+    </select>
+
+    <!-- 获取服务类型统计数据 -->
+    <select id="getServiceTypeStats" resultType="java.util.Map">
+        SELECT 
+            st.type_name AS serviceTypeName,
+            COUNT(DISTINCT a.appointment_id) AS orderCount,
+            COALESCE(SUM(CASE WHEN p.payment_status = 1 THEN p.payment_amount ELSE 0 END), 0) AS totalRevenue,
+            COUNT(DISTINCT CASE WHEN p.payment_status = 1 THEN a.appointment_id ELSE NULL END) AS paidCount
+        FROM service_type st
+        LEFT JOIN service s ON st.service_type_id = s.service_type_id
+        LEFT JOIN appointment a ON s.service_id = a.service_id
+        LEFT JOIN payment p ON a.appointment_id = p.appointment_id
+        <where>
+            <if test="startDate != null">AND DATE(a.appointment_date) >= #{startDate}</if>
+            <if test="endDate != null">AND DATE(a.appointment_date) &lt;= #{endDate}</if>
+        </where>
+        GROUP BY st.service_type_id, st.type_name
+        HAVING orderCount > 0
+        ORDER BY orderCount DESC
+    </select>
+
+    <!-- 获取评分分布数据 -->
+    <select id="getRatingDistribution" resultType="java.util.Map">
+        SELECT 
+            CAST(r.overall_rating AS UNSIGNED) AS rating,
+            COUNT(*) AS count
+        FROM review r
+        LEFT JOIN appointment a ON r.appointment_id = a.appointment_id
+        <where>
+            <if test="startDate != null">AND DATE(a.appointment_date) >= #{startDate}</if>
+            <if test="endDate != null">AND DATE(a.appointment_date) &lt;= #{endDate}</if>
+            AND r.overall_rating IS NOT NULL
+        </where>
+        GROUP BY CAST(r.overall_rating AS UNSIGNED)
+        ORDER BY rating DESC
+    </select>
+
+    <!-- ========================= -->
+    <!-- 统一统计页（/api/admin/statistics）专用：以 payment_time 为时间轴，且仅统计 payment_status=1（支付成功）的订单集合 -->
+    <!-- ========================= -->
+
+    <!-- 按支付方式统计支付成功收入（用于统一统计页） -->
+    <select id="statisticsPaidRevenueByPaymentMethod" resultMap="RevenueStatisticsResultMap">
+        SELECT
+            p.payment_method,
+            COUNT(*) AS success_count,
+            COALESCE(SUM(p.payment_amount), 0) AS success_amount
+        FROM payment p
+        <where>
+            AND p.payment_status = 1
+            <if test="startDate != null">AND DATE(p.payment_time) >= #{startDate}</if>
+            <if test="endDate != null">AND DATE(p.payment_time) &lt;= #{endDate}</if>
+        </where>
+        GROUP BY p.payment_method
+        ORDER BY success_amount DESC
+    </select>
+
+    <!-- 按日期统计支付成功收入趋势（用于统一统计页） -->
+    <select id="getPaidRevenueTrendByDate" resultType="java.util.Map">
+        SELECT
+            DATE(p.payment_time) AS date,
+            COALESCE(SUM(p.payment_amount), 0) AS amount
+        FROM payment p
+        <where>
+            AND p.payment_status = 1
+            <if test="startDate != null">AND DATE(p.payment_time) >= #{startDate}</if>
+            <if test="endDate != null">AND DATE(p.payment_time) &lt;= #{endDate}</if>
+        </where>
+        GROUP BY DATE(p.payment_time)
+        ORDER BY date ASC
+    </select>
+
+    <!-- 按预约状态统计“已支付成功订单”数量（用于统一统计页） -->
+    <select id="statisticsPaidOrdersByStatus" resultMap="AppointmentStatisticsResultMap">
+        SELECT
+            a.status,
+            COUNT(DISTINCT a.appointment_id) AS count
+        FROM payment p
+        INNER JOIN appointment a ON p.appointment_id = a.appointment_id
+        <where>
+            AND p.payment_status = 1
+            <if test="startDate != null">AND DATE(p.payment_time) >= #{startDate}</if>
+            <if test="endDate != null">AND DATE(p.payment_time) &lt;= #{endDate}</if>
+        </where>
+        GROUP BY a.status
+        ORDER BY a.status
+    </select>
+
+    <!-- 统计时间范围内支付成功的顾客活跃度（按顾客聚合） -->
+    <select id="statisticsPaidCustomerActivity" resultMap="CustomerActivityStatisticsResultMap">
+        SELECT
+            cd.customer_id,
+            cd.name AS customer_name,
+            COUNT(DISTINCT a.appointment_id) AS total_appointments,
+            MAX(DATE(p.payment_time)) AS last_appointment_date,
+            MIN(DATE(p.payment_time)) AS first_appointment_date,
+            COALESCE(SUM(p.payment_amount), 0) AS total_spent,
+            CASE
+                WHEN COUNT(DISTINCT a.appointment_id) >= 10 AND COALESCE(SUM(p.payment_amount), 0) >= 5000 THEN '高活跃'
+                WHEN COUNT(DISTINCT a.appointment_id) >= 5 AND COALESCE(SUM(p.payment_amount), 0) >= 2000 THEN '中活跃'
+                ELSE '低活跃'
+            END AS activity_level
+        FROM payment p
+        INNER JOIN appointment a ON p.appointment_id = a.appointment_id
+        INNER JOIN customer_detail cd ON a.customer_id = cd.customer_id
+        <where>
+            AND p.payment_status = 1
+            <if test="startDate != null">AND DATE(p.payment_time) >= #{startDate}</if>
+            <if test="endDate != null">AND DATE(p.payment_time) &lt;= #{endDate}</if>
+        </where>
+        GROUP BY cd.customer_id, cd.name
+        HAVING total_appointments > 0
+        ORDER BY total_appointments DESC, total_spent DESC
+    </select>
+
+    <!-- 获取支付成功客户活跃度趋势（按支付时间日期分组，顾客去重） -->
+    <select id="getPaidCustomerActivityTrendByDate" resultType="java.util.Map">
+        SELECT
+            DATE(p.payment_time) AS date,
+            COUNT(DISTINCT a.customer_id) AS count
+        FROM payment p
+        INNER JOIN appointment a ON p.appointment_id = a.appointment_id
+        <where>
+            AND p.payment_status = 1
+            <if test="startDate != null">AND DATE(p.payment_time) >= #{startDate}</if>
+            <if test="endDate != null">AND DATE(p.payment_time) &lt;= #{endDate}</if>
+        </where>
+        GROUP BY DATE(p.payment_time)
+        ORDER BY date ASC
+    </select>
+
+    <!-- 获取服务类型统计数据（按支付成功订单集合聚合） -->
+    <select id="getPaidServiceTypeStats" resultType="java.util.Map">
+        SELECT
+            COALESCE(s.service_name, '未分类') AS serviceTypeName,
+            COUNT(DISTINCT a.appointment_id) AS orderCount,
+            COALESCE(SUM(p.payment_amount), 0) AS totalRevenue,
+            COUNT(DISTINCT a.appointment_id) AS paidCount
+        FROM payment p
+        INNER JOIN appointment a ON p.appointment_id = a.appointment_id
+        LEFT JOIN service s ON a.service_id = s.service_id
+        <where>
+            AND p.payment_status = 1
+            <if test="startDate != null">AND DATE(p.payment_time) >= #{startDate}</if>
+            <if test="endDate != null">AND DATE(p.payment_time) &lt;= #{endDate}</if>
+        </where>
+        GROUP BY s.service_id, s.service_name
+        HAVING orderCount > 0
+        ORDER BY orderCount DESC
+    </select>
+
+    <!-- 统计服务质量（按服务类型）- 仅统计支付成功订单集合（按支付时间过滤） -->
+    <select id="statisticsPaidServiceQualityByType" resultMap="ServiceQualityStatisticsResultMap">
+        SELECT
+            st.service_type_id,
+            st.type_name AS service_type_name,
+            COUNT(r.review_id) AS review_count,
+            COALESCE(AVG(r.overall_rating), 0) AS average_overall_rating,
+            COALESCE(AVG(r.service_attitude_rating), 0) AS average_service_attitude_rating,
+            COALESCE(AVG(r.professional_ability_rating), 0) AS average_professional_ability_rating,
+            COALESCE(AVG(r.service_quality_rating), 0) AS average_service_quality_rating,
+            SUM(CASE WHEN r.overall_rating >= 4.5 THEN 1 ELSE 0 END) AS good_review_count,
+            SUM(CASE WHEN r.overall_rating >= 3.0 AND r.overall_rating &lt; 4.5 THEN 1 ELSE 0 END) AS medium_review_count,
+            SUM(CASE WHEN r.overall_rating &lt; 3.0 THEN 1 ELSE 0 END) AS bad_review_count,
+            CASE
+                WHEN COUNT(r.review_id) > 0 THEN
+                    ROUND(SUM(CASE WHEN r.overall_rating >= 4.5 THEN 1 ELSE 0 END) * 100.0 / COUNT(r.review_id), 2)
+                ELSE 0
+            END AS good_review_rate
+        FROM payment p
+        INNER JOIN appointment a ON p.appointment_id = a.appointment_id
+        LEFT JOIN service s ON a.service_id = s.service_id
+        LEFT JOIN service_type st ON s.service_type_id = st.service_type_id
+        LEFT JOIN review r ON a.appointment_id = r.appointment_id
+        <where>
+            AND p.payment_status = 1
+            <if test="startDate != null">AND DATE(p.payment_time) >= #{startDate}</if>
+            <if test="endDate != null">AND DATE(p.payment_time) &lt;= #{endDate}</if>
+            <if test="serviceTypeId != null">AND st.service_type_id = #{serviceTypeId}</if>
+        </where>
+        GROUP BY st.service_type_id, st.type_name
+        HAVING review_count > 0
+        ORDER BY average_overall_rating DESC
+    </select>
+
+    <!-- 获取评分分布数据 - 仅统计支付成功订单集合（按支付时间过滤） -->
+    <select id="getPaidRatingDistribution" resultType="java.util.Map">
+        SELECT
+            CAST(r.overall_rating AS UNSIGNED) AS rating,
+            COUNT(*) AS count
+        FROM payment p
+        INNER JOIN appointment a ON p.appointment_id = a.appointment_id
+        INNER JOIN review r ON a.appointment_id = r.appointment_id
+        <where>
+            AND p.payment_status = 1
+            <if test="startDate != null">AND DATE(p.payment_time) >= #{startDate}</if>
+            <if test="endDate != null">AND DATE(p.payment_time) &lt;= #{endDate}</if>
+            AND r.overall_rating IS NOT NULL
+        </where>
+        GROUP BY CAST(r.overall_rating AS UNSIGNED)
+        ORDER BY rating DESC
+    </select>
+
+</mapper>
+

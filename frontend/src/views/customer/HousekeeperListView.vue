@@ -33,28 +33,15 @@
               <div class="staff-meta" v-if="staff.origin">
                 籍贯：{{ staff.origin }}
               </div>
-              <div class="staff-meta" v-if="staff.rating">
-                评分：{{ parseFloat(staff.rating).toFixed(1) }} 分
+              <!-- 评分行固定占位：没有评分时也保留一行高度，避免卡片高度不一致 -->
+              <div class="staff-meta staff-meta--rating" :class="{ 'is-placeholder': !hasRating(staff) }">
+                <span v-if="hasRating(staff)">评分：{{ parseFloat(staff.rating).toFixed(1) }} 分</span>
+                <span v-else>&nbsp;</span>
               </div>
-              <div class="staff-resume" v-if="staff.resume">
-                {{ staff.resume }}
-              </div>
-              <div
-                class="staff-skills"
-                v-if="(staff.skills && staff.skills.length) || (staff.serviceSkills && staff.serviceSkills.length)"
-              >
-                <span class="skills-label">技能：</span>
-                <el-tag
-                  v-for="skill in (staff.skills || staff.serviceSkills)"
-                  :key="skill.skillId || skill.skill_id || `${skill.staffId || skill.staff_id}-${skill.serviceId || skill.service_id}`"
-                  size="small"
-                  style="margin: 2px;"
-                >
-                  {{ skill.serviceName || skill.service_name || skill.service?.serviceName || '服务技能' }}
-                  <span v-if="skill.proficiencyLevel || skill.proficiency_level">
-                    （{{ formatProficiency(skill.proficiencyLevel || skill.proficiency_level) }}）
-                  </span>
-                </el-tag>
+              <!-- 列表卡片只展示一段“个人简介”，来源与详情页保持一致（bio / personalIntroduction / resume） -->
+              <div class="staff-resume" :class="{ 'is-placeholder': !getMainIntro(staff) }">
+                <span v-if="getMainIntro(staff)">{{ getMainIntro(staff) }}</span>
+                <span v-else>&nbsp;</span>
               </div>
               <div class="card-actions">
                 <el-button type="primary" plain size="small" @click.stop="goToDetail(staff)">
@@ -98,6 +85,19 @@ const formatProficiency = (level) => {
     default:
       return '未知'
   }
+}
+
+// 与详情页保持同一规则：优先使用 bio，其次 personalIntroduction，最后兼容旧字段 resume
+const getMainIntro = (staff) => {
+  if (!staff) return ''
+  return staff.bio || staff.personalIntroduction || staff.resume || ''
+}
+
+const hasRating = (staff) => {
+  const v = staff?.rating
+  if (v === null || v === undefined || v === '') return false
+  const n = Number(v)
+  return Number.isFinite(n) && n > 0
 }
 
 const loadStaff = async () => {
@@ -182,17 +182,20 @@ onMounted(() => {
   font-size: 13px;
   color: #555;
   text-align: left;
+  /* 限制为多行省略，保证每个卡片高度一致，更加美观 */
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  line-height: 1.6;
+  /* 固定占位高度：3 行文本 */
+  min-height: calc(1.6em * 3);
 }
 
-.staff-skills {
-  margin-top: 10px;
-  text-align: left;
-  font-size: 13px;
-
-  .skills-label {
-    margin-right: 4px;
-    color: #666;
-  }
+.staff-meta--rating {
+  /* 固定占位高度：1 行文本 */
+  line-height: 1.6;
+  min-height: calc(1.6em * 1);
 }
 
 .card-actions {

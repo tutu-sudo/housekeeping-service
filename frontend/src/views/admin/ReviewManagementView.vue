@@ -53,7 +53,7 @@
           </el-card>
           
           <el-card style="margin-top: 20px">
-            <el-table :data="reviews" v-loading="loading" stripe>
+            <el-table :data="paginatedReviews" v-loading="loading" stripe>
               <el-table-column prop="reviewId" label="ID" width="80" />
               <el-table-column prop="appointmentId" label="预约ID" width="100" />
               <el-table-column prop="staffName" label="服务人员" width="120" />
@@ -105,8 +105,8 @@
                     size="small"
                     type="success"
                     link
+                    :class="['state-switch-btn', 'approve-btn', { 'is-active': getReviewDisplayState(scope.row) === 'approved' }]"
                     @click="handleApprove(scope.row)"
-                    v-if="!scope.row.approved"
                   >
                     审核通过
                   </el-button>
@@ -114,6 +114,7 @@
                     size="small"
                     type="danger"
                     link
+                    :class="['state-switch-btn', 'mask-btn', { 'is-active': getReviewDisplayState(scope.row) === 'masked' }]"
                     @click="handleMask(scope.row)"
                   >
                     屏蔽
@@ -121,6 +122,19 @@
                 </template>
               </el-table-column>
             </el-table>
+            
+            <!-- 分页 -->
+            <div class="pagination-container">
+              <el-pagination
+                v-model:current-page="currentPage"
+                v-model:page-size="pageSize"
+                :total="total"
+                :page-sizes="[10, 20, 50, 100]"
+                layout="total, sizes, prev, pager, next, jumper"
+                @size-change="handleSizeChange"
+                @current-change="handleCurrentChange"
+              />
+            </div>
           </el-card>
           
           <!-- 评价详情对话框（含三方互评信息 & 管理员评价入口） -->
@@ -290,6 +304,7 @@
 import { ref, onMounted, reactive, watch, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { Search } from '@element-plus/icons-vue'
+import { isReviewMasked } from '@/utils/review'
 import {
   getAdminReviews,
   approveReview,
@@ -306,6 +321,16 @@ const route = useRoute()
 
 const reviews = ref([])
 const loading = ref(false)
+// 分页相关
+const currentPage = ref(1)
+const pageSize = ref(10)
+const total = computed(() => reviews.value.length)
+
+const paginatedReviews = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return reviews.value.slice(start, end)
+})
 const detailDialogVisible = ref(false)
 const reviewDetail = ref(null)
 const detailLoading = ref(false)
@@ -336,6 +361,7 @@ const filters = ref({
 
 // 是否处于“员工自评”视图：用于控制列表和详情中部分字段的展示
 const isStaffSelfMode = computed(() => filters.value.reviewerRole === 2)
+const getReviewDisplayState = (row) => (isReviewMasked(row) ? 'masked' : 'approved')
 
 const applyReviewerRoleFromRoute = () => {
   const q = route.query?.reviewerRole
@@ -385,10 +411,20 @@ const resetFilters = () => {
     reviewerRole: undefined,
     reviewTarget: undefined
   }
+  currentPage.value = 1
   loadReviews()
 }
 
+const handleSizeChange = () => {
+  currentPage.value = 1
+}
+
+const handleCurrentChange = () => {
+  // 交给 computed 自动切片
+}
+
 const handleApprove = async (row) => {
+  if (getReviewDisplayState(row) === 'approved') return
   try {
     await ElMessageBox.confirm(
       '确定要审核通过该评价吗？',
@@ -411,6 +447,7 @@ const handleApprove = async (row) => {
 }
 
 const handleMask = async (row) => {
+  if (getReviewDisplayState(row) === 'masked') return
   try {
     const { value: reason } = await ElMessageBox.prompt(
       '请输入屏蔽原因（可选）',
@@ -616,5 +653,34 @@ watch(
   :deep(.el-form-item) {
     margin-bottom: 16px;
   }
+}
+
+.pagination-container {
+  margin-top: 20px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.state-switch-btn {
+  transition: all 0.2s ease;
+  font-weight: 400;
+}
+
+.approve-btn {
+  color: #3a8b1d !important;
+}
+
+.approve-btn.is-active {
+  color: rgba(103, 194, 58, 0.45) !important;
+  font-weight: 400;
+}
+
+.mask-btn {
+  color: #c45656 !important;
+}
+
+.mask-btn.is-active {
+  color: rgba(245, 108, 108, 0.45) !important;
+  font-weight: 400;
 }
 </style>

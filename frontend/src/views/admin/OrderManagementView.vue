@@ -11,20 +11,25 @@
           
           <el-card>
             <el-form :inline="true" class="filter-form">
-              <el-form-item label="客户ID">
-                <el-input v-model="filters.customerId" placeholder="请输入客户ID(数字)" clearable />
+              <el-form-item label="客户姓名">
+                <el-input v-model="filters.customerName" placeholder="请输入客户姓名" clearable />
               </el-form-item>
-              <el-form-item label="服务人员ID">
-                <el-input v-model="filters.staffId" placeholder="请输入服务人员ID(数字)" clearable />
+              <el-form-item label="服务人员姓名">
+                <el-input v-model="filters.staffName" placeholder="请输入服务人员姓名" clearable />
               </el-form-item>
               <el-form-item label="状态">
-                <el-select v-model="filters.status" placeholder="请选择状态" clearable>
+                <el-select
+                  v-model="filters.status"
+                  placeholder="请选择状态"
+                  clearable
+                  style="min-width: 180px"
+                >
                   <el-option label="全部" :value="''" />
-                  <el-option label="待接单" :value="0" />
+                  <el-option label="待确认" :value="0" />
                   <el-option label="已接单" :value="1" />
-                  <el-option label="服务中" :value="2" />
+                  <el-option label="进行中" :value="2" />
                   <el-option label="已完成" :value="3" />
-                  <el-option label="已拒单/已关闭" :value="4" />
+                  <el-option label="已取消" :value="4" />
                   <el-option label="已拒单/已关闭" :value="5" />
                 </el-select>
               </el-form-item>
@@ -94,7 +99,7 @@
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="操作" width="200" fixed="right">
+              <el-table-column label="操作" width="120" fixed="right">
                 <template #default="scope">
                   <el-button
                     size="small"
@@ -104,20 +109,6 @@
                   >
                     详情
                   </el-button>
-                  <el-dropdown @command="(cmd) => handleStatusChange(scope.row.appointmentId, cmd)">
-                    <el-button size="small" type="primary" link>
-                      修改状态 <el-icon><ArrowDown /></el-icon>
-                    </el-button>
-                    <template #dropdown>
-                      <el-dropdown-menu>
-                        <el-dropdown-item :command="1" :disabled="!canTransition(scope.row.status, 1)">设为待付款</el-dropdown-item>
-                        <el-dropdown-item :command="2" :disabled="!canTransition(scope.row.status, 2)">设为已付款/服务中</el-dropdown-item>
-                        <el-dropdown-item :command="3" :disabled="!canTransition(scope.row.status, 3)">设为已完成</el-dropdown-item>
-                        <el-dropdown-item :command="4" :disabled="!canTransition(scope.row.status, 4)">设为已取消</el-dropdown-item>
-                        <el-dropdown-item :command="5" :disabled="!canTransition(scope.row.status, 5)">设为已拒单/已关闭</el-dropdown-item>
-                      </el-dropdown-menu>
-                    </template>
-                  </el-dropdown>
                 </template>
               </el-table-column>
             </el-table>
@@ -209,13 +200,18 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { Search, ArrowDown } from '@element-plus/icons-vue'
-import { getAdminAppointments, updateAdminAppointmentStatus, getAdminAppointmentDetail } from '@/api/admin'
+import { Search } from '@element-plus/icons-vue'
+import { getAdminAppointments, getAdminAppointmentDetail } from '@/api/admin'
 import { getUserInfo } from '@/api/user'
 import { getStaffDetail } from '@/api/staff'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import Navigation from '@/components/common/Navigation.vue'
 import AdminSidebar from '@/components/admin/AdminSidebar.vue'
+import {
+  normalizePaymentStatus,
+  getPaymentStatusType as getUnifiedPaymentStatusType,
+  getPaymentStatusText as getUnifiedPaymentStatusText
+} from '@/utils/payment'
 
 const router = useRouter()
 const orders = ref([])
@@ -228,8 +224,8 @@ const appointmentDetail = ref(null)
 const detailLoading = ref(false)
 
 const filters = ref({
-  customerId: '',
-  staffId: '',
+  customerName: '',
+  staffName: '',
   status: null,
   startDate: '',
   endDate: ''
@@ -240,14 +236,6 @@ const customerNameCache = new Map()
 const staffNameCache = new Map()
 
 const isBlank = (v) => v === null || v === undefined || String(v).trim() === ''
-
-const parseLongStrict = (v) => {
-  const s = String(v ?? '').trim()
-  if (!s) return null
-  if (!/^\d+$/.test(s)) return undefined
-  const n = Number(s)
-  return Number.isFinite(n) ? n : undefined
-}
 
 const pickId = (row, keys) => {
   for (const k of keys) {
@@ -319,28 +307,60 @@ const enrichOrderNames = async (list) => {
   }
 }
 
+// 使用详情接口补全一条预约记录的关键信息（服务项目、结算方式、支付状态等）
+const enrichOrderDetails = async (list) => {
+  if (!Array.isArray(list) || list.length === 0) return
+
+  const tasks = list.map(async (row) => {
+    const id = row.appointmentId || row.id
+    if (!id) return
+    try {
+      const res = await getAdminAppointmentDetail(id)
+      const detail = normalizeAppointmentRow(res.data?.data || res.data || {})
+      if (!detail) return
+
+      // 只在列表缺少时才用详情补齐，避免覆盖后端列表里已有值
+      row.serviceName = row.serviceName || detail.serviceName
+      row.billingType = row.billingType || detail.billingType
+      if (row.paymentStatus === undefined || row.paymentStatus === null || row.paymentStatus === '') {
+        row.paymentStatus = detail.paymentStatus
+      }
+      if (row.totalAmount === undefined || row.totalAmount === null) {
+        row.totalAmount = detail.totalAmount
+      }
+    } catch (e) {
+      // 单条失败不影响整体列表
+      console.warn('补全预约详情失败 appointmentId=', id, e)
+    }
+  })
+
+  await Promise.allSettled(tasks)
+}
+
 const getStatusText = (status) => {
+  // 订单状态文案以后端文档为准：
+  // 0: 待确认, 1: 已接单, 2: 进行中, 3: 已完成, 4: 已取消, 5: 已拒单/已关闭
   const statusMap = {
-    0: '待接单',
+    0: '待确认',
     1: '已接单',
-    2: '服务中',
+    2: '进行中',
     3: '已完成',
-    4: '已拒单/已关闭',
+    4: '已取消',
     5: '已拒单/已关闭'
   }
-  return statusMap[status] || '未知'
+  return statusMap[status] || '未知状态'
 }
 
 const getStatusType = (status) => {
   const typeMap = {
     0: 'warning',
-    1: 'success',
+    1: 'primary',
     2: 'primary',
     3: 'success',
     4: 'info',
     5: 'danger'
   }
-  return typeMap[status] || ''
+  return typeMap[status] || 'info'
 }
 
 const getBillingTypeText = (billingType) => {
@@ -353,45 +373,34 @@ const getBillingTypeText = (billingType) => {
 }
 
 const getPaymentStatusText = (paymentStatus) => {
-  // 兼容数字/字符串/空值
-  if (paymentStatus === null || paymentStatus === undefined || paymentStatus === '') return '未知'
-  const val = typeof paymentStatus === 'string' ? parseInt(paymentStatus, 10) : paymentStatus
-  const map = {
-    0: '待支付',
-    1: '已支付',
-    2: '支付失败',
-    3: '已退款'
-  }
-  return map[val] || '未知'
+  return getUnifiedPaymentStatusText(paymentStatus)
 }
 
 const getPaymentStatusType = (paymentStatus) => {
-  if (paymentStatus === null || paymentStatus === undefined || paymentStatus === '') return 'info'
-  const val = typeof paymentStatus === 'string' ? parseInt(paymentStatus, 10) : paymentStatus
-  const map = {
-    0: 'warning',
-    1: 'success',
-    2: 'danger',
-    3: 'info'
-  }
-  return map[val] || 'info'
+  return getUnifiedPaymentStatusType(paymentStatus)
 }
 
-// 状态流转：尽量贴合业务（最终以后台校验为准）
-const canTransition = (fromStatus, toStatus) => {
-  const from = typeof fromStatus === 'string' ? parseInt(fromStatus, 10) : fromStatus
-  const to = typeof toStatus === 'string' ? parseInt(toStatus, 10) : toStatus
-  if (from === to) return false
+// 统一归一化一条预约记录的字段，保证列表与详情展示一致
+const normalizeAppointmentRow = (row) => {
+  if (!row || typeof row !== 'object') return row
 
-  // 终态不允许再变更（如需“恢复”应另做功能）
-  if (from === 3 || from === 4 || from === 5) return false
+  // 订单状态字段兼容：status / orderStatus / order_status
+  const rawStatus = row.status ?? row.orderStatus ?? row.order_status
+  const status =
+    typeof rawStatus === 'string' && /^\d+$/.test(rawStatus) ? parseInt(rawStatus, 10) : rawStatus
 
-  // 合法主流程：0->1->2->3；任意未终态可取消/拒绝
-  const allowed = new Set()
-  if (from === 0) [1, 4, 5].forEach(s => allowed.add(s))
-  if (from === 1) [2, 4, 5].forEach(s => allowed.add(s))
-  if (from === 2) [3, 4, 5].forEach(s => allowed.add(s))
-  return allowed.has(to)
+  // 结算方式字段兼容：billingType / billing_type / settlementType
+  const billingType =
+    row.billingType ?? row.billing_type ?? row.settlementType ?? row.settlement_type
+
+  const paymentStatus = normalizePaymentStatus(row)
+
+  return {
+    ...row,
+    status,
+    billingType,
+    paymentStatus
+  }
 }
 
 const toYmd = (date) => {
@@ -413,22 +422,17 @@ const loadOrders = async () => {
   loading.value = true
   try {
     const params = {}
-    // 只传有值的筛选参数
-    const cid = parseLongStrict(filters.value.customerId)
-    if (cid === undefined) {
-      ElMessage.warning('客户ID必须是数字')
-      return
+    // 只传有值的筛选参数（按姓名模糊查询）
+    if (filters.value.customerName && String(filters.value.customerName).trim()) {
+      // 按姓名模糊查询，后端可按 LIKE 处理；若后端暂不支持，则由前端在本地再做一次过滤
+      params.customerName = String(filters.value.customerName).trim()
     }
-    if (cid !== null) params.customerId = cid
-
-    const sid = parseLongStrict(filters.value.staffId)
-    if (sid === undefined) {
-      ElMessage.warning('服务人员ID必须是数字')
-      return
+    if (filters.value.staffName && String(filters.value.staffName).trim()) {
+      params.staffName = String(filters.value.staffName).trim()
     }
-    if (sid !== null) params.staffId = sid
 
-    if (filters.value.status !== null && filters.value.status !== undefined) {
+    // 状态为 null/undefined/空字符串 时都视为“不筛选状态”
+    if (!isBlank(filters.value.status)) {
       params.status = filters.value.status
     }
     if (filters.value.startDate) params.startDate = filters.value.startDate
@@ -438,8 +442,10 @@ const loadOrders = async () => {
     // 统一Result格式：{ code, message, data, timestamp }
     const payload = response.data?.data ?? response.data
     const list = Array.isArray(payload) ? payload : (payload?.list || [])
-    orders.value = Array.isArray(list) ? list : []
+    orders.value = (Array.isArray(list) ? list : []).map(normalizeAppointmentRow)
+    // 先补全姓名，再用详情接口补全服务项目/支付状态等关键信息
     await enrichOrderNames(orders.value)
+    await enrichOrderDetails(orders.value)
     total.value = orders.value.length
     // 如果当前页超过总页数，回到最后一页
     const maxPage = Math.max(1, Math.ceil(total.value / pageSize.value))
@@ -457,8 +463,8 @@ const loadOrders = async () => {
 
 const resetFilters = () => {
   filters.value = {
-    customerId: '',
-    staffId: '',
+    customerName: '',
+    staffName: '',
     status: null,
     startDate: '',
     endDate: ''
@@ -468,9 +474,41 @@ const resetFilters = () => {
   setLast30Days()
 }
 
+// 在前端再做一层模糊筛选，确保在后端暂不支持姓名模糊时，也能正常按姓名/状态过滤
+const filteredOrders = computed(() => {
+  let list = [...orders.value]
+
+  const nameKeyword = String(filters.value.customerName || '').trim().toLowerCase()
+  const staffKeyword = String(filters.value.staffName || '').trim().toLowerCase()
+  const statusFilter = isBlank(filters.value.status) ? null : Number(filters.value.status)
+
+  if (nameKeyword) {
+    list = list.filter((row) => {
+      const name = String(row.customerName || '').toLowerCase()
+      return name.includes(nameKeyword)
+    })
+  }
+
+  if (staffKeyword) {
+    list = list.filter((row) => {
+      const name = String(row.staffName || '').toLowerCase()
+      return name.includes(staffKeyword)
+    })
+  }
+
+  if (statusFilter !== null && !Number.isNaN(statusFilter)) {
+    list = list.filter((row) => {
+      const val = row.status
+      return Number(val) === statusFilter
+    })
+  }
+
+  return list
+})
+
 const pagedOrders = computed(() => {
   const start = (currentPage.value - 1) * pageSize.value
-  return orders.value.slice(start, start + pageSize.value)
+  return filteredOrders.value.slice(start, start + pageSize.value)
 })
 
 const handlePageChange = (page) => {
@@ -482,34 +520,12 @@ const handlePageSizeChange = (size) => {
   currentPage.value = 1
 }
 
-const handleStatusChange = async (appointmentId, status) => {
-  try {
-    await ElMessageBox.confirm(
-      `确定要将状态修改为"${getStatusText(status)}"吗？`,
-      '确认操作',
-      {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
-        type: 'warning'
-      }
-    )
-    
-    await updateAdminAppointmentStatus(appointmentId, status)
-    ElMessage.success('状态修改成功')
-    loadOrders()
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error(error.message || '操作失败')
-    }
-  }
-}
-
 const viewDetail = async (appointmentId) => {
   detailLoading.value = true
   detailDialogVisible.value = true
   try {
     const response = await getAdminAppointmentDetail(appointmentId)
-    appointmentDetail.value = response.data?.data || response.data
+    appointmentDetail.value = normalizeAppointmentRow(response.data?.data || response.data)
     // 详情接口如果没带名字，也做一次补全
     if (appointmentDetail.value) {
       const list = [appointmentDetail.value]

@@ -202,10 +202,68 @@ const handleFilterChange = (conditions) => {
   filterConditions.value = conditions
 }
 
-const handleStaffSelected = (staff) => {
+// 当左侧列表选择服务人员时，同步到右侧表单（服务项目 + 服务人员）
+const handleStaffSelected = async (staff) => {
+  if (!staff) return
+
+  // 1）永远以当前点击的家政人员为准，覆盖右侧信息栏
   selectedStaff.value = staff
   appointmentData.staffId = staff.staffId || staff.staff_id || staff.id
     appointmentData.staffName = staff.name
+
+  // 2）如果右侧预约表单已经加载，强制把“服务项目 + 服务人员”联动为该家政人员的配置
+  if (appointmentFormRef.value) {
+    // 确保服务列表已加载（如果还没加载会先拉一次接口）
+    if (appointmentFormRef.value.loadServices) {
+      await appointmentFormRef.value.loadServices()
+    }
+
+    const form = appointmentFormRef.value.form
+    if (!form) return
+
+    // 优先使用 staff 对象中明确的 serviceId，其次根据服务名称反查
+    const services = appointmentFormRef.value.services || []
+
+    const serviceIdFromStaff =
+      staff.serviceId ||
+      staff.mainServiceId ||
+      (staff.service && (staff.service.serviceId || staff.service.id))
+
+    const serviceNameFromStaff =
+      staff.serviceName ||
+      (staff.service && (staff.service.serviceName || staff.service.name))
+
+    let finalServiceId = null
+
+    if (serviceIdFromStaff) {
+      finalServiceId = Number(serviceIdFromStaff)
+    } else if (serviceNameFromStaff && services.length) {
+      const matched = services.find(
+        (s) =>
+          s.serviceName === serviceNameFromStaff ||
+          s.name === serviceNameFromStaff
+      )
+      if (matched) {
+        finalServiceId = matched.id || matched.serviceId
+      }
+    }
+
+    if (finalServiceId) {
+      // 同步服务项目到右侧下拉框和本地预约数据
+      form.serviceId = finalServiceId
+      appointmentData.serviceId = finalServiceId
+
+      // 触发表单内部的服务变更逻辑（计费提示、时间规则等），并等待可选服务人员列表刷新完成
+      if (appointmentFormRef.value.handleServiceChange) {
+        await appointmentFormRef.value.handleServiceChange()
+      }
+
+      // 在服务项目确定并刷新候选人员列表后，再同步当前点击的服务人员到右侧表单
+      if (appointmentFormRef.value.syncSelectedStaffFromParent) {
+        appointmentFormRef.value.syncSelectedStaffFromParent(staff)
+      }
+    }
+  }
 }
 
 // 在离开预约页面前，把当前填写内容临时保存到 sessionStorage
@@ -465,31 +523,32 @@ onMounted(async () => {
   })
 
   if (appointmentFormRef.value) {
-    // 设置服务项目（如果路由参数中有）
-    if (route.query.serviceId) {
-      const serviceId = Number(route.query.serviceId)
-      appointmentData.serviceId = serviceId
-      
-      // 确保服务列表已加载
+    // 即使没有 serviceId，也先加载服务列表，确保后续可按服务名称/人员信息反查服务项目
       if (appointmentFormRef.value.loadServices) {
         await appointmentFormRef.value.loadServices()
       }
       
-      // 设置服务项目并触发变更
-      if (appointmentFormRef.value.form) {
+    // 有预选家政人员时，复用统一联动逻辑同步“服务项目 + 服务人员”
+    if (selectedStaff.value) {
+      await handleStaffSelected(selectedStaff.value)
+    }
+
+    // 如果路由明确传了 serviceId，优先覆盖为该 serviceId
+    if (route.query.serviceId && appointmentFormRef.value.form) {
+      const serviceId = Number(route.query.serviceId)
+      if (Number.isFinite(serviceId) && serviceId > 0) {
+        appointmentData.serviceId = serviceId
         appointmentFormRef.value.form.serviceId = serviceId
         if (appointmentFormRef.value.handleServiceChange) {
-          appointmentFormRef.value.handleServiceChange()
+          await appointmentFormRef.value.handleServiceChange()
         }
-      }
-    } else {
-      // 即使没有 serviceId，也要加载服务列表（用于后续选择）
-      if (appointmentFormRef.value.loadServices) {
-        await appointmentFormRef.value.loadServices()
+        if (selectedStaff.value && appointmentFormRef.value.syncSelectedStaffFromParent) {
+          appointmentFormRef.value.syncSelectedStaffFromParent(selectedStaff.value)
+        }
       }
     }
 
-    // 确保服务人员信息已设置（通过 watch 自动同步，这里只是确保一下）
+    // 兜底：确保服务人员名称一定同步显示
     if (selectedStaff.value && appointmentFormRef.value.form) {
       const staffId = selectedStaff.value.staffId || selectedStaff.value.staff_id || selectedStaff.value.id
       if (staffId) {

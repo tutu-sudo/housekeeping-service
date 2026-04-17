@@ -18,10 +18,11 @@ export function getReviewByAppointment(appointmentId) {
 
 // 获取某预约的三方评价包（顾客视角）
 // 返回 AppointmentReviewBundleDTO：{ appointmentId, customerReview, staffSelfReview, adminReviewForCustomer, adminReviewForStaff }
-export function getAppointmentReviewBundle(appointmentId) {
+export function getAppointmentReviewBundle(appointmentId, options = {}) {
   return request({
     url: `/reviews/appointment/${appointmentId}/bundle`,
-    method: 'get'
+    method: 'get',
+    skipErrorHandler: options.skipErrorHandler === true
   })
 }
 
@@ -88,9 +89,10 @@ export function getMySelfReviews(params) {
 }
 
 // 获取某预约的三方评价包（服务人员视角）
-export function getStaffAppointmentReviewBundle(appointmentId) {
+export function getStaffAppointmentReviewBundle(appointmentId, options = {}) {
   return request({
     url: `/staff/reviews/appointment/${appointmentId}/bundle`,
-    method: 'get'
+    method: 'get',
+    skipErrorHandler: options.skipErrorHandler === true
   })
 }

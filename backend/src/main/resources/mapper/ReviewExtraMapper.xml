@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="housekeeping.housekeepingnow.mapper.ReviewExtraMapper">
+
+    <resultMap id="BaseResultMap" type="housekeeping.housekeepingnow.entity.ReviewExtra">
+        <id column="review_extra_id" property="reviewExtraId"/>
+        <result column="appointment_id" property="appointmentId"/>
+        <result column="reviewer_role" property="reviewerRole"/>
+        <result column="review_target" property="reviewTarget"/>
+        <result column="reviewer_user_id" property="reviewerUserId"/>
+        <result column="overall_rating" property="overallRating"/>
+        <result column="review_content" property="reviewContent"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT review_extra_id, appointment_id, reviewer_role, reviewer_user_id,
+               overall_rating, review_content, create_time, update_time
+        FROM review_extra
+        WHERE review_extra_id = #{reviewExtraId}
+    </select>
+
+    <select id="selectByAppointmentIdAndRoleAndTarget" resultMap="BaseResultMap">
+        SELECT review_extra_id, appointment_id, reviewer_role, review_target, reviewer_user_id,
+               overall_rating, review_content, create_time, update_time
+        FROM review_extra
+        WHERE appointment_id = #{appointmentId, jdbcType=BIGINT}
+          AND reviewer_role = #{reviewerRole, jdbcType=TINYINT}
+          AND review_target = #{reviewTarget, jdbcType=TINYINT}
+    </select>
+
+    <select id="selectByAppointmentId" resultMap="BaseResultMap">
+        SELECT review_extra_id, appointment_id, reviewer_role, review_target, reviewer_user_id,
+               overall_rating, review_content, create_time, update_time
+        FROM review_extra
+        WHERE appointment_id = #{appointmentId, jdbcType=BIGINT}
+        ORDER BY create_time ASC
+    </select>
+
+    <select id="selectByReviewerUserId" resultMap="BaseResultMap">
+        SELECT review_extra_id, appointment_id, reviewer_role, review_target, reviewer_user_id,
+               overall_rating, review_content, create_time, update_time
+        FROM review_extra
+        WHERE reviewer_user_id = #{reviewerUserId, jdbcType=BIGINT}
+        ORDER BY create_time DESC
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="reviewExtraId">
+        INSERT INTO review_extra (
+            appointment_id, reviewer_role, review_target, reviewer_user_id, overall_rating, review_content
+        ) VALUES (
+            #{appointmentId, jdbcType=BIGINT},
+            #{reviewerRole, jdbcType=TINYINT},
+            #{reviewTarget, jdbcType=TINYINT},
+            #{reviewerUserId, jdbcType=BIGINT},
+            #{overallRating, jdbcType=DECIMAL},
+            #{reviewContent, jdbcType=VARCHAR}
+        )
+    </insert>
+
+</mapper>
+

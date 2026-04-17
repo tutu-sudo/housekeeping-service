@@ -4,11 +4,11 @@
       <div class="footer-left">
         <div class="contact-info">
           <h4>统一服务热线</h4>
-          <p class="phone">0571-888 66666</p>
+          <p class="phone">0543-888 66666</p>
         </div>
         <div class="address-info">
-          <p>地址：浙江省杭州市西湖区文三路398号东信大厦4号楼</p>
-          <p>邮编：310013</p>
+          <p>地址：天津市西青区精武镇天津市大学软件学院</p>
+          <p>邮编：256600</p>
         </div>
       </div>
       
@@ -19,7 +19,7 @@
             <!-- 使用本地占位图，避免外网DNS解析失败 -->
             <div class="qrcode-placeholder">APP</div>
             </div>
-            <p>下载三替好生活APP</p>
+            <p>下载APP</p>
           </div>
           <div class="qr-item">
             <div class="qr-code">
@@ -33,14 +33,11 @@
       <div class="footer-right">
         <div class="footer-links">
           <div class="link-column">
-            <h4>走进三替</h4>
+            <h4>走进企业</h4>
             <ul>
               <li>集团简介</li>
               <li>发展历程</li>
-              <li>董事长致辞</li>
               <li>企业文化</li>
-              <li>领导题词</li>
-              <li>三替荣誉</li>
             </ul>
           </div>
           <div class="link-column">
@@ -64,7 +61,7 @@
             </ul>
           </div>
           <div class="link-column">
-            <h4>加入三替</h4>
+            <h4>加入企业</h4>
             <ul>
               <li>员工招募</li>
               <li>合作共赢</li>
@@ -82,7 +79,7 @@
     </div>
     
     <div class="footer-bottom">
-      <p>&copy; 2024 家政服务预约平台 版权所有</p>
+      <p>&copy; 2026 家政服务预约平台 版权所有</p>
     </div>
     
     <!-- 右侧固定按钮 -->

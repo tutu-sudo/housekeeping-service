@@ -14,8 +14,8 @@
         <div class="stat-label">拥有1.5万多名在册服务人员</div>
       </div>
       <div class="stat-item">
-        <div class="stat-number">1992</div>
-        <div class="stat-label">公司创立于1992年</div>
+        <div class="stat-number">2026</div>
+        <div class="stat-label">公司创立于2026年</div>
         <div class="stat-subtitle">ABOUT US</div>
       </div>
     </div>

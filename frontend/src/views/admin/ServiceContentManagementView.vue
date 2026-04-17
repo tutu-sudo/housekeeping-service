@@ -18,7 +18,9 @@
                   placeholder="请选择服务类型"
                   clearable
                   @change="loadServices"
+                  style="width: 180px;"
                 >
+                  <el-option label="全部" value="all" />
                   <el-option
                     v-for="type in serviceTypes"
                     :key="type.value"
@@ -287,7 +289,7 @@ const paginatedServices = computed(() => {
 })
 
 const filters = ref({
-  mainCategory: null,
+  mainCategory: 'all',
   keyword: ''
 })
 
@@ -382,15 +384,20 @@ const loadServiceTypes = async () => {
 }
 
 const loadServices = async () => {
+  // 筛选条件变化后，回到第一页，避免当前页码超过结果页数导致“看起来搜不到”
+  currentPage.value = 1
   loading.value = true
   try {
     const params = {}
-    if (filters.value.mainCategory) {
+    // “全部”不传参；只有选择具体服务类型才传
+    if (
+      filters.value.mainCategory &&
+      filters.value.mainCategory !== 'all'
+    ) {
       params.mainCategory = filters.value.mainCategory
     }
-    if (filters.value.keyword && filters.value.keyword.trim()) {
-      params.keyword = filters.value.keyword.trim()
-    }
+    // 关键词：为了支持“模糊查询”且避免后端 keyword 字段名/匹配口径不一致导致无法搜索
+    // 这里不把 keyword 透传给后端，而是拿到满足其他筛选条件的列表后再做前端模糊过滤。
 
     const response = await getAdminServices(params)
     const data = response.data?.data || response.data
@@ -400,6 +407,17 @@ const loadServices = async () => {
       services.value = data.list
     } else {
       services.value = []
+    }
+
+    const kw = (filters.value.keyword || '').trim().toLowerCase()
+    if (kw) {
+      services.value = services.value.filter((row) => {
+        const serviceName = `${row?.serviceName ?? ''}`.toLowerCase()
+        const description = `${row?.description ?? ''}`.toLowerCase()
+        const mainCategory = `${row?.mainCategory ?? ''}`.toLowerCase()
+        const content = `${row?.content ?? ''}`.toLowerCase()
+        return serviceName.includes(kw) || description.includes(kw) || mainCategory.includes(kw) || content.includes(kw)
+      })
     }
   } catch (error) {
     console.error('获取服务列表失败:', error)
@@ -413,7 +431,7 @@ const loadServices = async () => {
 
 const resetFilters = () => {
   filters.value = {
-    mainCategory: null,
+    mainCategory: 'all',
     keyword: ''
   }
   currentPage.value = 1

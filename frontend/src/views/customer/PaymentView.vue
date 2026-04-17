@@ -64,7 +64,8 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { CreditCard, Money } from '@element-plus/icons-vue'
 import { getAppointmentDetail } from '@/api/appointments'
-import { createPayment, queryPaymentStatus, createAlipayPayment } from '@/api/payment'
+import { createPayment, queryPaymentStatus, createAlipayPayment, queryPaymentStatusByAppointment } from '@/api/payment'
+import { isPaidPaymentStatus } from '@/utils/payment'
 import Navigation from '@/components/common/Navigation.vue'
 
 const router = useRouter()
@@ -73,6 +74,15 @@ const route = useRoute()
 const appointment = ref(null)
 const paymentMethod = ref('alipay')
 const paying = ref(false)
+let appointmentPaymentWatcher = null
+let appointmentPaymentWatcherAttempts = 0
+let appointmentPaymentWatcherNotExistCount = 0
+let appointmentPaymentWatcherStartTimer = null
+
+const APPOINTMENT_POLL_INTERVAL_MS = 3000
+const APPOINTMENT_POLL_MAX_ATTEMPTS = 12
+const APPOINTMENT_POLL_MAX_NOT_EXIST = 3
+const APPOINTMENT_POLL_START_DELAY_MS = 3000
 
 const loadAppointment = async () => {
   let appointmentId = route.query.appointmentId
@@ -155,10 +165,21 @@ const handlePayment = async () => {
         if (typeof paymentUrl === 'string' && paymentUrl.trim()) {
           // 验证URL格式
           if (paymentUrl.startsWith('http://') || paymentUrl.startsWith('https://')) {
-            // 跳转到支付宝支付页面
-            console.log('🚀 跳转到支付宝支付页面')
-            window.location.href = paymentUrl
-            // 注意：这里不设置paying.value = false，因为页面会跳转
+            // 在“新标签页”打开支付宝收银台，当前站点页面不跳走
+            console.log('🚀 在新标签页打开支付宝支付页面')
+            const payWindow = window.open(paymentUrl, '_blank')
+            if (!payWindow) {
+              localStorage.removeItem('pendingPaymentAppointmentId')
+              ElMessage.warning('浏览器拦截了支付弹窗，请允许弹窗后重试')
+              paying.value = false
+              return
+            }
+            // 避免“刚拿到支付链接就高频查询”，延迟后再开始轮询
+            startAppointmentPaymentWatcher(appointmentId, {
+              initialDelayMs: APPOINTMENT_POLL_START_DELAY_MS
+            })
+            // 当前页面仍然保留在订单支付页，恢复按钮状态
+            paying.value = false
           } else {
             localStorage.removeItem('pendingPaymentAppointmentId')
             console.error('❌ 支付URL格式不正确:', paymentUrl)
@@ -240,7 +261,7 @@ const handlePayment = async () => {
       router.push(`/appointment/${appointmentId}`)
     } else {
       const errorMessage = resp?.message || error.message || '支付失败，请重试'
-      ElMessage.error(errorMessage)
+    ElMessage.error(errorMessage)
     }
     paying.value = false
   }
@@ -288,12 +309,139 @@ const stopPaymentPolling = () => {
   }
 }
 
+const normalizeQueryStatus = (payload) => {
+  const raw =
+    payload?.paymentStatus ??
+    payload?.payment_status ??
+    payload?.payStatus ??
+    payload?.pay_status
+  if (raw === null || raw === undefined || raw === '') return null
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : null
+}
+
+const isTradeNotExistError = (error) => {
+  const data = error?.response?.data || {}
+  const text = [
+    data?.subCode,
+    data?.subMsg,
+    data?.message,
+    error?.message
+  ].filter(Boolean).join(' ').toUpperCase()
+  return text.includes('TRADE_NOT_EXIST')
+}
+
+const resetAppointmentWatcherState = () => {
+  appointmentPaymentWatcherAttempts = 0
+  appointmentPaymentWatcherNotExistCount = 0
+}
+
+const startAppointmentPaymentWatcher = (appointmentId, options = {}) => {
+  const id = Number(appointmentId)
+  if (!Number.isFinite(id) || id <= 0) return
+  if (appointmentPaymentWatcher) return
+  if (appointmentPaymentWatcherStartTimer) return
+
+  const initialDelayMs = Number(options.initialDelayMs)
+  const delayMs = Number.isFinite(initialDelayMs) && initialDelayMs >= 0
+    ? initialDelayMs
+    : 0
+
+  resetAppointmentWatcherState()
+
+  const startPolling = () => {
+    appointmentPaymentWatcherStartTimer = null
+    if (appointmentPaymentWatcher) return
+
+    appointmentPaymentWatcher = setInterval(async () => {
+      appointmentPaymentWatcherAttempts += 1
+      if (appointmentPaymentWatcherAttempts > APPOINTMENT_POLL_MAX_ATTEMPTS) {
+        stopAppointmentPaymentWatcher()
+        localStorage.removeItem('pendingPaymentAppointmentId')
+        ElMessage.warning('支付结果确认超时，请重新发起支付')
+        return
+      }
+
+      try {
+        const response = await queryPaymentStatusByAppointment(id, { skipErrorHandler: true })
+        const payload = response?.data?.data || response?.data || {}
+        const normalizedStatus = normalizeQueryStatus(payload)
+
+        if (isPaidPaymentStatus(payload) || normalizedStatus === 1) {
+          stopAppointmentPaymentWatcher()
+          localStorage.removeItem('pendingPaymentAppointmentId')
+          ElMessage.success('支付成功，正在返回订单详情')
+          router.replace({
+            path: `/appointment/${id}`,
+            query: { from: 'payment-success', refresh: 'true' }
+          })
+          return
+        }
+
+        if (normalizedStatus === 2) {
+          stopAppointmentPaymentWatcher()
+          localStorage.removeItem('pendingPaymentAppointmentId')
+          ElMessage.error('支付失败，请重新发起支付')
+          return
+        }
+
+        // payment_status = 0/null 视为未确认成功，继续等待
+        appointmentPaymentWatcherNotExistCount = 0
+      } catch (error) {
+        if (isTradeNotExistError(error)) {
+          appointmentPaymentWatcherNotExistCount += 1
+          if (appointmentPaymentWatcherNotExistCount >= APPOINTMENT_POLL_MAX_NOT_EXIST) {
+            stopAppointmentPaymentWatcher()
+            localStorage.removeItem('pendingPaymentAppointmentId')
+            ElMessage.warning('连续多次未查询到交易，请重新发起支付')
+            return
+          }
+        }
+        // 静默重试，避免“暂无支付记录”等提示干扰用户
+        console.debug('轮询预约支付状态失败:', error)
+      }
+    }, APPOINTMENT_POLL_INTERVAL_MS)
+  }
+
+  if (delayMs > 0) {
+    appointmentPaymentWatcherStartTimer = setTimeout(startPolling, delayMs)
+    return
+  }
+  startPolling()
+}
+
+const stopAppointmentPaymentWatcher = () => {
+  if (appointmentPaymentWatcherStartTimer) {
+    clearTimeout(appointmentPaymentWatcherStartTimer)
+    appointmentPaymentWatcherStartTimer = null
+  }
+  if (appointmentPaymentWatcher) {
+    clearInterval(appointmentPaymentWatcher)
+    appointmentPaymentWatcher = null
+  }
+  resetAppointmentWatcherState()
+}
+
+const handleWindowFocusForPendingPayment = () => {
+  const pendingId = localStorage.getItem('pendingPaymentAppointmentId')
+  if (!pendingId) return
+  startAppointmentPaymentWatcher(pendingId)
+}
+
 onMounted(() => {
   loadAppointment()
+  // 兜底：如果用户刷新支付页且仍有待确认订单，继续自动检测支付结果
+  const pendingId = route.query.appointmentId || localStorage.getItem('pendingPaymentAppointmentId')
+  if (pendingId) {
+    startAppointmentPaymentWatcher(pendingId, { initialDelayMs: APPOINTMENT_POLL_START_DELAY_MS })
+  }
+  window.addEventListener('focus', handleWindowFocusForPendingPayment)
 })
 
 onUnmounted(() => {
   stopPaymentPolling()
+  stopAppointmentPaymentWatcher()
+  window.removeEventListener('focus', handleWindowFocusForPendingPayment)
 })
 </script>
 

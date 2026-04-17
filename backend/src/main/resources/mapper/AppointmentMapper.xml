@@ -1,0 +1,270 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="housekeeping.housekeepingnow.mapper.AppointmentMapper">
+
+    <resultMap id="BaseResultMap" type="housekeeping.housekeepingnow.entity.Appointment">
+        <id column="appointment_id" property="appointmentId"/>
+        <result column="customer_id" property="customerId"/>
+        <result column="customer_name" property="customerName"/>
+        <result column="customer_phone" property="customerPhone"/>
+        <!-- 兼容字段：同一列映射到contactPhone -->
+        <result column="customer_phone" property="contactPhone"/>
+        <result column="staff_id" property="staffId"/>
+        <result column="service_id" property="serviceId"/>
+        <result column="service_name" property="serviceName"/>
+        <result column="staff_name" property="staffName"/>
+        <result column="payment_status" property="paymentStatus"/>
+        <result column="appointment_date" property="appointmentDate"/>
+        <result column="start_time" property="startTime"/>
+        <result column="end_time" property="endTime"/>
+        <result column="end_datetime" property="endDatetime"/>
+        <result column="total_duration" property="totalDuration"/>
+        <result column="total_days" property="totalDays"/>
+        <result column="billing_type" property="billingType"/>
+        <result column="service_address" property="serviceAddress"/>
+        <result column="special_requirements" property="specialRequirements"/>
+        <result column="status" property="status"/>
+        <result column="accept_time" property="acceptTime"/>
+        <result column="paid_time" property="paidTime"/>
+        <result column="total_amount" property="totalAmount"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT a.appointment_id, a.customer_id, a.customer_name, a.customer_phone, a.staff_id, a.service_id,
+               a.appointment_date, a.start_time, a.end_time, a.end_datetime,
+               a.total_duration, a.total_days, a.billing_type,
+               a.service_address, a.special_requirements, a.status, a.accept_time, a.paid_time, a.total_amount,
+               a.create_time, a.update_time,
+               s.service_name,
+               st.name AS staff_name,
+               p.payment_status
+        FROM appointment a
+        LEFT JOIN service s ON a.service_id = s.service_id
+        LEFT JOIN staff st ON a.staff_id = st.staff_id
+        LEFT JOIN payment p ON a.appointment_id = p.appointment_id
+        WHERE a.appointment_id = #{appointmentId, jdbcType=BIGINT}
+    </select>
+
+    <select id="selectByCustomerId" resultMap="BaseResultMap">
+        SELECT a.appointment_id, a.customer_id, a.customer_name, a.customer_phone, a.staff_id, a.service_id,
+               a.appointment_date, a.start_time, a.end_time, a.end_datetime,
+               a.total_duration, a.total_days, a.billing_type,
+               a.service_address, a.special_requirements, a.status, a.accept_time, a.paid_time, a.total_amount,
+               a.create_time, a.update_time,
+               s.service_name,
+               st.name AS staff_name,
+               p.payment_status
+        FROM appointment a
+        LEFT JOIN service s ON a.service_id = s.service_id
+        LEFT JOIN staff st ON a.staff_id = st.staff_id
+        LEFT JOIN payment p ON a.appointment_id = p.appointment_id
+        WHERE a.customer_id = #{customerId}
+        ORDER BY a.create_time DESC
+    </select>
+
+    <select id="selectByStaffId" resultMap="BaseResultMap">
+        SELECT a.appointment_id, a.customer_id, a.customer_name, a.customer_phone, a.staff_id, a.service_id,
+               a.appointment_date, a.start_time, a.end_time, a.end_datetime,
+               a.total_duration, a.total_days, a.billing_type,
+               a.service_address, a.special_requirements, a.status, a.accept_time, a.paid_time, a.total_amount,
+               a.create_time, a.update_time,
+               s.service_name,
+               st.name AS staff_name,
+               p.payment_status
+        FROM appointment a
+        LEFT JOIN service s ON a.service_id = s.service_id
+        LEFT JOIN staff st ON a.staff_id = st.staff_id
+        LEFT JOIN payment p ON a.appointment_id = p.appointment_id
+        WHERE a.staff_id = #{staffId}
+        ORDER BY a.appointment_date DESC, a.start_time DESC
+    </select>
+
+    <!-- 检查同一服务人员在同一日期内时间是否冲突（排除指定预约ID） -->
+    <!-- 注意：此查询需要同时考虑单天预约（使用start_time/end_time）和跨天预约（使用end_datetime） -->
+    <!-- 冲突判断逻辑：
+         1. 单天预约：检查同一日期内时间是否重叠
+         2. 跨天预约：检查时间范围是否重叠（使用end_datetime）
+    -->
+    <select id="checkTimeConflict" resultMap="BaseResultMap">
+        SELECT appointment_id, customer_id, staff_id, service_id,
+               appointment_date, start_time, end_time, end_datetime,
+               total_duration, total_days, billing_type,
+               service_address, special_requirements, status, total_amount,
+               create_time, update_time
+        FROM appointment
+        WHERE staff_id = #{staffId}
+          AND status IN (0, 1, 2)  <!-- 仅与未完成的预约判断冲突 -->
+          AND (
+                <!-- 情况1：已有预约是单天预约，新预约也是单天预约（同一天） -->
+                (appointment_date = #{appointmentDate} 
+                 AND (end_datetime IS NULL OR DATE(end_datetime) = appointment_date)
+                 AND start_time &lt; #{endTime} AND end_time &gt; #{startTime})
+                OR
+                <!-- 情况2：已有预约是跨天预约，新预约的开始时间在已有预约的时间范围内 -->
+                (end_datetime IS NOT NULL 
+                 AND TIMESTAMP(appointment_date, start_time) &lt; TIMESTAMP(#{appointmentDate}, #{endTime})
+                 AND end_datetime &gt; TIMESTAMP(#{appointmentDate}, #{startTime}))
+                OR
+                <!-- 情况3：已有预约是跨天预约，且覆盖了新预约的日期 -->
+                (end_datetime IS NOT NULL 
+                 AND appointment_date &lt;= #{appointmentDate}
+                 AND end_datetime &gt; TIMESTAMP(#{appointmentDate}, #{startTime}))
+              )
+          <if test="excludeAppointmentId != null">
+              AND appointment_id &lt;&gt; #{excludeAppointmentId}
+          </if>
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="appointmentId">
+        INSERT INTO appointment (
+            customer_id, customer_name, customer_phone, staff_id, service_id,
+            appointment_date, start_time, end_time, end_datetime,
+            total_duration, total_days, billing_type,
+            service_address, special_requirements,
+            status, accept_time, paid_time, total_amount
+        ) VALUES (
+            #{customerId}, #{customerName}, #{customerPhone}, #{staffId}, #{serviceId},
+            #{appointmentDate}, #{startTime}, #{endTime}, #{endDatetime},
+            #{totalDuration}, #{totalDays}, #{billingType},
+            #{serviceAddress}, #{specialRequirements},
+            #{status}, #{acceptTime}, #{paidTime}, #{totalAmount}
+        )
+    </insert>
+
+    <update id="update">
+        UPDATE appointment
+        <set>
+            <if test="customerId != null">customer_id = #{customerId},</if>
+            <if test="customerName != null">customer_name = #{customerName},</if>
+            <if test="customerPhone != null">customer_phone = #{customerPhone},</if>
+            <if test="staffId != null">staff_id = #{staffId},</if>
+            <if test="serviceId != null">service_id = #{serviceId},</if>
+            <if test="appointmentDate != null">appointment_date = #{appointmentDate},</if>
+            <if test="startTime != null">start_time = #{startTime},</if>
+            <if test="endTime != null">end_time = #{endTime},</if>
+            <if test="endDatetime != null">end_datetime = #{endDatetime},</if>
+            <if test="totalDuration != null">total_duration = #{totalDuration},</if>
+            <if test="totalDays != null">total_days = #{totalDays},</if>
+            <if test="billingType != null">billing_type = #{billingType},</if>
+            <if test="serviceAddress != null">service_address = #{serviceAddress},</if>
+            <if test="specialRequirements != null">special_requirements = #{specialRequirements},</if>
+            <if test="status != null">status = #{status},</if>
+            <if test="acceptTime != null">accept_time = #{acceptTime},</if>
+            <if test="paidTime != null">paid_time = #{paidTime},</if>
+            <if test="totalAmount != null">total_amount = #{totalAmount},</if>
+        </set>
+        WHERE appointment_id = #{appointmentId, jdbcType=BIGINT}
+    </update>
+
+    <update id="updateStatus">
+        UPDATE appointment
+        SET status = #{status}
+        WHERE appointment_id = #{appointmentId, jdbcType=BIGINT}
+    </update>
+
+    <!-- 批量更新预约状态 -->
+    <update id="batchUpdateStatus">
+        UPDATE appointment
+        SET status = #{status}
+        WHERE appointment_id IN
+        <foreach collection="appointmentIds" item="appointmentId" open="(" separator="," close=")">
+            #{appointmentId, jdbcType=BIGINT}
+        </foreach>
+    </update>
+
+    <!-- 查询需要自动更新为"进行中"的预约（已确认且开始时间已到） -->
+    <select id="selectAppointmentsToStart" resultMap="BaseResultMap">
+        SELECT a.appointment_id, a.customer_id, a.customer_name, a.customer_phone, a.staff_id, a.service_id,
+               a.appointment_date, a.start_time, a.end_time, a.end_datetime,
+               a.total_duration, a.total_days, a.billing_type,
+               a.service_address, a.special_requirements, a.status, a.accept_time, a.paid_time, a.total_amount,
+               a.create_time, a.update_time
+        FROM appointment a
+        LEFT JOIN payment p ON a.appointment_id = p.appointment_id
+        WHERE a.status = 1  <!-- 已接单 -->
+          AND p.payment_status = 1  <!-- 已支付 -->
+          AND (
+              <!-- 单天预约：检查开始时间 -->
+              (a.end_datetime IS NULL OR DATE(a.end_datetime) = a.appointment_date)
+              AND TIMESTAMP(a.appointment_date, a.start_time) <![CDATA[<=]]> NOW()
+              OR
+              <!-- 跨天预约：检查开始时间 -->
+              (a.end_datetime IS NOT NULL AND DATE(a.end_datetime) != a.appointment_date)
+              AND TIMESTAMP(a.appointment_date, a.start_time) <![CDATA[<=]]> NOW()
+          )
+    </select>
+
+    <!-- 查询需要自动更新为"已完成"的预约（进行中且结束时间已过，且已支付） -->
+    <select id="selectAppointmentsToComplete" resultMap="BaseResultMap">
+        SELECT a.appointment_id, a.customer_id, a.customer_name, a.customer_phone, a.staff_id, a.service_id,
+               a.appointment_date, a.start_time, a.end_time, a.end_datetime,
+               a.total_duration, a.total_days, a.billing_type,
+               a.service_address, a.special_requirements, a.status, a.total_amount,
+               a.create_time, a.update_time
+        FROM appointment a
+        LEFT JOIN payment p ON a.appointment_id = p.appointment_id
+        WHERE a.status = 2  <!-- 服务中 -->
+          AND p.payment_status = 1  <!-- 已支付 -->
+          AND (
+              <!-- 单天预约：检查结束时间 -->
+              (a.end_datetime IS NULL OR DATE(a.end_datetime) = a.appointment_date)
+              AND TIMESTAMP(a.appointment_date, a.end_time) <![CDATA[<=]]> NOW()
+              OR
+              <!-- 跨天预约：检查结束时间 -->
+              (a.end_datetime IS NOT NULL AND DATE(a.end_datetime) != a.appointment_date)
+              AND a.end_datetime <![CDATA[<=]]> NOW()
+          )
+    </select>
+
+    <!-- 查询10分钟未支付的预约（用于定时删除）
+         规则：
+         - 只要服务人员已接单（存在accept_time），从接单时刻开始计算10分钟
+         - 无论是否生成支付记录、当前预约状态是多少，只要仍未支付都视为超时订单
+         - 这些超时未支付订单将被物理删除（包括对应的payment记录）
+    -->
+    <select id="selectUnpaidAppointmentsToDelete" resultMap="BaseResultMap">
+        SELECT a.appointment_id, a.customer_id, a.customer_name, a.customer_phone, a.staff_id, a.service_id,
+               a.appointment_date, a.start_time, a.end_time, a.end_datetime,
+               a.total_duration, a.total_days, a.billing_type,
+               a.service_address, a.special_requirements, a.status, a.total_amount,
+               a.create_time, a.update_time
+        FROM appointment a
+        LEFT JOIN payment p ON a.appointment_id = p.appointment_id
+        WHERE (p.payment_status IS NULL OR p.payment_status = 0)  <!-- 未支付或未创建支付记录 -->
+          AND a.accept_time IS NOT NULL
+          AND TIMESTAMPADD(MINUTE, 10, a.accept_time) <![CDATA[<=]]> NOW()  <!-- 接单时间超过10分钟 -->
+    </select>
+
+    <select id="selectList" resultMap="BaseResultMap">
+        SELECT a.appointment_id, a.customer_id, a.customer_name, a.customer_phone, a.staff_id, a.service_id,
+               a.appointment_date, a.start_time, a.end_time, a.end_datetime,
+               a.total_duration, a.total_days, a.billing_type,
+               a.service_address, a.special_requirements, a.status, a.accept_time, a.paid_time, a.total_amount,
+               a.create_time, a.update_time,
+               s.service_name,
+               st.name AS staff_name,
+               p.payment_status
+        FROM appointment a
+        LEFT JOIN service s ON a.service_id = s.service_id
+        LEFT JOIN staff st ON a.staff_id = st.staff_id
+        LEFT JOIN payment p ON a.appointment_id = p.appointment_id
+        <where>
+            <if test="customerId != null">AND a.customer_id = #{customerId}</if>
+            <if test="staffId != null">AND a.staff_id = #{staffId}</if>
+            <if test="status != null">AND a.status = #{status}</if>
+            <if test="startDate != null">AND a.appointment_date <![CDATA[>=]]> #{startDate}</if>
+            <if test="endDate != null">AND a.appointment_date <![CDATA[<=]]> #{endDate}</if>
+        </where>
+        ORDER BY a.appointment_date DESC, a.start_time DESC
+    </select>
+
+    <!-- 删除预约（物理删除） -->
+    <delete id="deleteById">
+        DELETE FROM appointment WHERE appointment_id = #{appointmentId, jdbcType=BIGINT}
+    </delete>
+
+</mapper>
+
+

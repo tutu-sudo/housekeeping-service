@@ -313,11 +313,72 @@ export function getStaffDetail(staffId) {
   })
 }
 
-export function updateStaffVerificationStatus(staffId, status) {
+// 管理员在后台编辑服务人员资料
+export function updateStaffProfileByAdmin(staffId, data) {
   return request({
-    url: `/admin/staff/${staffId}/verification`,
+    url: `/admin/staff/${staffId}`,
+    method: 'put',
+    data
+  })
+}
+
+// 审核通过（服务人员申请）
+export function approveStaffApplication(staffId, remark) {
+  return request({
+    url: `/admin/staff/${staffId}/approve`,
+    method: 'post',
+    params: remark ? { remark } : {},
+    skipErrorHandler: true
+  })
+}
+
+// 审核驳回（服务人员申请）
+export function rejectStaffApplication(staffId, reason) {
+  return request({
+    url: `/admin/staff/${staffId}/reject`,
+    method: 'post',
+    params: reason ? { reason } : {},
+    skipErrorHandler: true
+  })
+}
+
+export function updateStaffVerificationStatus(staffId, status) {
+  // 优先走新后端（/approve /reject），再兼容旧实现
+  if (Number(status) === 1) return approveStaffApplication(staffId)
+  if (Number(status) === 2) return rejectStaffApplication(staffId)
+
+  const url = `/admin/staff/${staffId}/verification`
+  const params = { status }
+
+  // 兼容不同后端实现：
+  // 1) PATCH /admin/staff/{id}/verification?status=1（当前前端默认）
+  // 2) POST  /admin/staff/{id}/verification?status=1（部分后端用 post）
+  // 3) POST  /admin/staff/{id}/audit  body: { status }（或 approved/reason 之类）
+  return request({
+    url,
     method: 'patch',
-    params: { status }
+    params,
+    skipErrorHandler: true
+  }).catch((e) => {
+    const httpStatus = e?.response?.status
+    if (httpStatus !== 404) return Promise.reject(e)
+
+    return request({
+      url,
+      method: 'post',
+      params,
+      skipErrorHandler: true
+    }).catch((e2) => {
+      const httpStatus2 = e2?.response?.status
+      if (httpStatus2 !== 404) return Promise.reject(e2)
+
+      return request({
+        url: `/admin/staff/${staffId}/audit`,
+        method: 'post',
+        data: { status },
+        skipErrorHandler: true
+      })
+    })
   })
 }
 
@@ -354,6 +415,77 @@ export function updateStaffWorkStatus(staffId, workStatus, reason) {
     url: `/admin/staff/${staffId}/work-status`,
     method: 'patch',
     params: { workStatus, reason }
+  })
+}
+
+// ========== 用户/角色管理（新增：用户搜索、升级为服务人员、降级回普通用户） ==========
+// 后端：GET /api/admin/users/search?keyword=xxx&limit=20
+export function searchAdminUsers(keyword, limit = 20) {
+  // 兼容兜底：部分后端可能使用单数路径 /admin/user/search
+  // 仅在 404 时自动 fallback，避免你们因为路径命名差异卡住联调
+  const params = { keyword, limit }
+  return request({
+    url: '/admin/users/search',
+    method: 'get',
+    params,
+    skipErrorHandler: true
+  }).catch((e) => {
+    const status = e?.response?.status
+    if (status === 404) {
+      return request({
+        url: '/admin/user/search',
+        method: 'get',
+        params,
+        skipErrorHandler: true
+      })
+    }
+    return Promise.reject(e)
+  })
+}
+
+// 后端：POST /api/admin/users/{userId}/promote-to-staff
+export function promoteUserToStaff(userId) {
+  return request({
+    url: `/admin/users/${userId}/promote-to-staff`,
+    method: 'post',
+    // 让页面自己接管错误提示，显示后端返回的 message/code，避免只看到“服务器错误”
+    skipErrorHandler: true
+  })
+}
+
+// 后端：POST /api/admin/users/{userId}/demote-to-user
+export function demoteUserToUser(userId) {
+  return request({
+    url: `/admin/users/${userId}/demote-to-user`,
+    method: 'post'
+  })
+}
+
+// 普通用户管理：分页查询 / 启用禁用登录
+// GET /api/admin/users/normal?page=1&size=20&keyword=xxx
+export function getNormalUsers(params) {
+  return request({
+    url: '/admin/users/normal',
+    method: 'get',
+    params
+  })
+}
+
+// POST /api/admin/users/{userId}/disable-login
+export function disableNormalUserLogin(userId) {
+  return request({
+    url: `/admin/users/${userId}/disable-login`,
+    method: 'post',
+    skipErrorHandler: true
+  })
+}
+
+// POST /api/admin/users/{userId}/enable-login
+export function enableNormalUserLogin(userId) {
+  return request({
+    url: `/admin/users/${userId}/enable-login`,
+    method: 'post',
+    skipErrorHandler: true
   })
 }
 

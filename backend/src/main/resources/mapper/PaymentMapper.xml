@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="housekeeping.housekeepingnow.mapper.PaymentMapper">
+
+    <resultMap id="BaseResultMap" type="housekeeping.housekeepingnow.entity.Payment">
+        <id column="payment_id" property="paymentId"/>
+        <result column="appointment_id" property="appointmentId"/>
+        <result column="payment_amount" property="paymentAmount"/>
+        <result column="payment_method" property="paymentMethod"/>
+        <result column="payment_status" property="paymentStatus"/>
+        <result column="transaction_id" property="transactionId"/>
+        <result column="payment_time" property="paymentTime"/>
+        <result column="create_time" property="createTime"/>
+        <result column="update_time" property="updateTime"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT payment_id, appointment_id, payment_amount, payment_method,
+               payment_status, transaction_id, payment_time, create_time, update_time
+        FROM payment
+        WHERE payment_id = #{paymentId}
+    </select>
+
+    <select id="selectByAppointmentId" resultMap="BaseResultMap">
+        SELECT payment_id, appointment_id, payment_amount, payment_method,
+               payment_status, transaction_id, payment_time, create_time, update_time
+        FROM payment
+        WHERE appointment_id = #{appointmentId, jdbcType=BIGINT}
+    </select>
+
+    <select id="selectByTransactionId" resultMap="BaseResultMap">
+        SELECT payment_id, appointment_id, payment_amount, payment_method,
+               payment_status, transaction_id, payment_time, create_time, update_time
+        FROM payment
+        WHERE transaction_id = #{transactionId}
+    </select>
+
+    <select id="selectList" resultMap="BaseResultMap">
+        SELECT payment_id, appointment_id, payment_amount, payment_method,
+               payment_status, transaction_id, payment_time, create_time, update_time
+        FROM payment
+        <where>
+            <if test="appointmentId != null">AND appointment_id = #{appointmentId, jdbcType=BIGINT}</if>
+            <if test="paymentStatus != null">AND payment_status = #{paymentStatus}</if>
+            <if test="paymentMethod != null and paymentMethod != ''">AND payment_method = #{paymentMethod}</if>
+        </where>
+        ORDER BY create_time DESC
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="paymentId">
+        INSERT INTO payment (appointment_id, payment_amount, payment_method, payment_status,
+                             transaction_id, payment_time)
+        VALUES (#{appointmentId, jdbcType=BIGINT}, #{paymentAmount, jdbcType=DECIMAL}, #{paymentMethod, jdbcType=VARCHAR}, #{paymentStatus, jdbcType=INTEGER},
+                #{transactionId, jdbcType=VARCHAR}, #{paymentTime, jdbcType=TIMESTAMP})
+    </insert>
+
+    <update id="update">
+        UPDATE payment
+        <set>
+            <if test="appointmentId != null">appointment_id = #{appointmentId, jdbcType=BIGINT},</if>
+            <if test="paymentAmount != null">payment_amount = #{paymentAmount},</if>
+            <if test="paymentMethod != null">payment_method = #{paymentMethod},</if>
+            <if test="paymentStatus != null">payment_status = #{paymentStatus},</if>
+            <if test="transactionId != null">transaction_id = #{transactionId},</if>
+            <if test="paymentTime != null">payment_time = #{paymentTime},</if>
+        </set>
+        WHERE payment_id = #{paymentId}
+    </update>
+
+    <update id="updatePaymentStatus">
+        UPDATE payment
+        SET payment_status = #{paymentStatus},
+            transaction_id = #{transactionId}
+        WHERE payment_id = #{paymentId}
+    </update>
+
+    <!-- 根据预约ID删除支付记录 -->
+    <delete id="deleteByAppointmentId">
+        DELETE FROM payment WHERE appointment_id = #{appointmentId, jdbcType=BIGINT}
+    </delete>
+
+</mapper>
+
+

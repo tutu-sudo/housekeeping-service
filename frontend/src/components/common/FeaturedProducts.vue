@@ -72,49 +72,49 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { View } from '@element-plus/icons-vue'
+import { getAvailableServices } from '@/api/services'
 
 const router = useRouter()
 
-// ========== 主推产品数据配置 ==========
-// ⚠️ 这里是需要替换图片的地方！
-// image 字段：替换为您的主推产品图片URL
-// 建议：每张图片尺寸 300x200 像素，共4张（对应4个主推产品）
+const STATIC_PROMO_PRODUCT_ID = 4
+
+// 前3个卡片会和后端服务数据同步，第4个宣传卡保持静态不变
 const products = ref([
   {
     id: 1,
     title: '日常保洁',
     description: '自营保洁师,日常保洁含专业擦玻璃。',
-    price: '40',
-    unit: '/时',
-    // ⚠️ 第1个主推产品图片 - 专业日常保洁
+    price: '待确认',
+    unit: '/小时',
     image: '/images/daily-cleaning.png',
-    bookedCount: 506733  // 已预约人数
+    bookedCount: 506733,
+    serviceId: null
   },
   {
     id: 2,
     title: '管道疏通',
     description: '统一定价 价格优惠 安全便捷专业师傅上门维修',
-    price: '150起',
-    unit: '/次',
-    // ⚠️ 第2个主推产品图片 - 管道疏通
+    price: '待确认',
+    unit: '/小时',
     image: '/images/疏通管道.png',
-    bookedCount: 325378
+    bookedCount: 325378,
+    serviceId: null
   },
   {
     id: 3,
     title: '健康辅助',
     description: '适用于健康照料、洗衣煲汤做饭',
-    price: '2500起',
-    unit: '/月',
-    // ⚠️ 第3个主推产品图片 - 包月小时工
+    price: '待确认',
+    unit: '/小时',
     image: '/images/养老陪护.png',
-    bookedCount: 168794
+    bookedCount: 168794,
+    serviceId: null
   },
   {
-    id: 4,
+    id: STATIC_PROMO_PRODUCT_ID,
     title: '专业版星级包年·乐享生活4H...',
     description: '两周一次,全年定制管家式服务',
     price: '7288起',
@@ -125,18 +125,69 @@ const products = ref([
   }
 ])
 
-// 服务名称映射
-const serviceNameMap = {
-  1: '日常保洁',
-  2: '管道疏通',
-  3: '健康辅助',
-  4: '专业版星级包年·乐享生活4H'
+const featuredServiceTargets = [
+  { productId: 1, expectedNames: ['日常保洁'] },
+  { productId: 2, expectedNames: ['管道疏通'] },
+  { productId: 3, expectedNames: ['健康辅助'] }
+]
+
+const normalizeName = (name) => String(name || '').trim().toLowerCase()
+
+const toNumberPrice = (value) => {
+  if (value === null || value === undefined || value === '') return null
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  const parsed = Number(String(value).replace(/[^\d.]/g, ''))
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+const findMatchedService = (services, expectedNames = []) => {
+  if (!Array.isArray(services) || services.length === 0) return null
+  const normalizedExpected = expectedNames.map(normalizeName).filter(Boolean)
+  if (normalizedExpected.length === 0) return null
+
+  const exact = services.find((service) => {
+    const serviceName = normalizeName(service.serviceName || service.service_name)
+    return normalizedExpected.includes(serviceName)
+  })
+  if (exact) return exact
+
+  return services.find((service) => {
+    const serviceName = normalizeName(service.serviceName || service.service_name)
+    return normalizedExpected.some((name) => serviceName.includes(name) || name.includes(serviceName))
+  }) || null
+}
+
+const syncFeaturedProductsWithBackend = async () => {
+  try {
+    const response = await getAvailableServices()
+    const serviceList = response?.data?.data || response?.data || []
+    if (!Array.isArray(serviceList) || serviceList.length === 0) return
+
+    featuredServiceTargets.forEach((target) => {
+      const matched = findMatchedService(serviceList, target.expectedNames)
+      if (!matched) return
+
+      const product = products.value.find((item) => item.id === target.productId)
+      if (!product) return
+
+      const rawPrice = matched.price ?? matched.servicePrice ?? matched.hourlyRate
+      const parsedPrice = toNumberPrice(rawPrice)
+
+      product.title = matched.serviceName || matched.service_name || product.title
+      product.description = matched.description || product.description
+      product.serviceId = matched.serviceId || matched.service_id || null
+      product.price = parsedPrice === null ? '待确认' : String(parsedPrice)
+      product.unit = '/小时'
+    })
+  } catch (error) {
+    console.error('sync featured products failed:', error)
+  }
 }
 
 const handleBook = (product) => {
   try {
     // 专业版星级包年服务跳转到专门的详情页
-    if (product.id === 4) {
+    if (product.id === STATIC_PROMO_PRODUCT_ID) {
       router.push({
         path: '/service/annual-package'
       }).catch(err => {
@@ -149,11 +200,13 @@ const handleBook = (product) => {
       return
     }
     
-    // 其他服务跳转到预约页面，传递服务名称
-    const serviceName = serviceNameMap[product.id] || product.title
+    // 其他服务跳转到预约页面，优先传递真实 serviceId 与服务名称
     router.push({
       path: '/appointment',
-      query: { serviceName: serviceName }
+      query: {
+        serviceId: product.serviceId || '',
+        serviceName: product.title
+      }
     }).catch(err => {
       console.error('Navigation to appointment failed:', err)
     })
@@ -165,6 +218,10 @@ const handleBook = (product) => {
 const viewMore = () => {
   router.push('/housekeepers')
 }
+
+onMounted(() => {
+  syncFeaturedProductsWithBackend()
+})
 </script>
 
 <style scoped lang="scss">

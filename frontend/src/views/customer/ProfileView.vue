@@ -57,7 +57,7 @@
                   </el-empty>
                 </div>
                 
-                <el-table :data="appointments" v-else stripe border style="width: 100%">
+                <el-table :data="paginatedAppointments" v-else stripe border style="width: 100%">
                   <el-table-column prop="appointmentId" label="预约ID" width="90" align="center">
                     <template #default="scope">
                       {{ scope.row.appointmentId ?? scope.row.id ?? '-' }}
@@ -130,6 +130,18 @@
                     </template>
                   </el-table-column>
                 </el-table>
+                <div v-if="appointments.length > 0" class="pagination-wrapper">
+                  <el-pagination
+                    background
+                    layout="total, sizes, prev, pager, next, jumper"
+                    :current-page="currentPage"
+                    :page-size="pageSize"
+                    :page-sizes="pageSizes"
+                    :total="appointments.length"
+                    @current-change="handlePageChange"
+                    @size-change="handlePageSizeChange"
+                  />
+                </div>
               </el-tab-pane>
               
               <el-tab-pane label="个人信息" name="info">
@@ -301,12 +313,16 @@ import { getStaffDetail } from '@/api/staff'
 import { changePassword } from '@/api/auth-extra'
 import { APPOINTMENT_STATUS_CONFIG, APPOINTMENT_STATUS, PAYMENT_STATUS_CONFIG } from '@/utils/constants'
 import Navigation from '@/components/common/Navigation.vue'
+import { queryPaymentStatusByAppointment } from '@/api/payment'
 
 const router = useRouter()
 const route = useRoute()
 const store = useStore()
 
 const appointments = ref([])
+const currentPage = ref(1)
+const pageSize = ref(10)
+const pageSizes = ref([10, 20, 50])
 const reviews = ref([])
 const loading = ref(false)
 const loadingReviews = ref(false)
@@ -316,12 +332,31 @@ const statusFilter = ref('')
 let statusPollingTimer = null // 快速状态轮询（针对待支付订单）
 let autoRefreshTimer = null // 定期自动刷新（所有数据）
 
+// 支付成功后“即时刷新”窗口（毫秒）
+const PAYMENT_REFRESH_WINDOW_MS = 5 * 60 * 1000
+
 const userInfo = ref({
   avatar: '',
   username: '',
   phone: '',
   email: ''
 })
+
+// 我的预约分页（每页10条）
+const paginatedAppointments = computed(() => {
+  const start = (currentPage.value - 1) * pageSize.value
+  const end = start + pageSize.value
+  return appointments.value.slice(start, end)
+})
+
+const handlePageChange = (page) => {
+  currentPage.value = page
+}
+
+const handlePageSizeChange = (size) => {
+  pageSize.value = size
+  currentPage.value = 1
+}
 
 // 修改密码弹窗相关
 const changePasswordDialogVisible = ref(false)
@@ -460,8 +495,9 @@ const loadAppointments = async () => {
       })
     }
     
-    // 先设置数据，不阻塞显示
+    // 先设置数据，不阻塞显示，并重置到第一页
     appointments.value = cleanedData
+    currentPage.value = 1
     
     // 如果有缺失的服务名称或服务人员姓名，尝试批量补充（异步执行，不阻塞显示，不抛出错误）
     enhanceAppointmentData().catch(error => {
@@ -664,7 +700,7 @@ const startStatusPolling = () => {
     if (!stillNeedPolling) {
       stopStatusPolling()
     }
-  }, 30000) // 每30秒轮询一次（支付状态需要及时反馈，但不能太频繁）
+  }, 120000) // 每120秒（2分钟）轮询一次，减轻刷新频率
 }
 
 const stopStatusPolling = () => {
@@ -695,7 +731,7 @@ const startAutoRefresh = () => {
         console.error('自动刷新评价列表失败:', error)
       }
     }
-  }, 60000) // 每1分钟自动刷新一次
+  }, 180000) // 每3分钟自动刷新一次
 }
 
 const stopAutoRefresh = () => {
@@ -984,6 +1020,34 @@ watch(() => route.query, (newQuery) => {
   }
 }, { immediate: true })
 
+// 兜底：如果用户从支付成功页返回但没带 query，也根据 localStorage 标记刷新一次
+const refreshIfJustPaid = async () => {
+  try {
+    const lastPaidId = localStorage.getItem('lastPaidAppointmentId')
+    const lastPaidAt = Number(localStorage.getItem('lastPaidAt') || '0')
+    if (!lastPaidId || !lastPaidAt) return
+    if (Date.now() - lastPaidAt > PAYMENT_REFRESH_WINDOW_MS) return
+
+    // 先触发一次后端支付状态同步，再刷新列表，避免列表刚好还没 join 到最新支付状态
+    try {
+      await queryPaymentStatusByAppointment(lastPaidId)
+    } catch (e) {
+      // ignore
+    }
+
+    // 只要进入“我的预约”页，就立刻刷新一次列表
+    if (activeTab.value === 'appointments') {
+      await loadAppointments()
+    }
+
+    // 用完即清，避免反复刷新
+    localStorage.removeItem('lastPaidAppointmentId')
+    localStorage.removeItem('lastPaidAt')
+  } catch (e) {
+    // ignore
+  }
+}
+
 // 监听页面可见性，当页面重新可见时刷新数据
 const handleVisibilityChange = () => {
   if (!document.hidden) {
@@ -1028,6 +1092,9 @@ onMounted(async () => {
   if (route.query.tab) {
     activeTab.value = route.query.tab
   }
+
+  // 支付成功后：进入个人中心时立刻刷新（不用等轮询）
+  await refreshIfJustPaid()
   
   // 如果是从预约成功/支付成功页面跳转，刷新预约列表
   if (route.query.refresh === 'true' || route.query.from === 'appointment-success' || route.query.from === 'payment-success') {
@@ -1095,6 +1162,12 @@ onUnmounted(() => {
 
 .loading-container {
   padding: 20px;
+}
+
+.pagination-wrapper {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
 }
 
 .tab-header {

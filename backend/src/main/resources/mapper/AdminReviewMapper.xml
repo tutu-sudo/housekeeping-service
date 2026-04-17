@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="housekeeping.housekeepingnow.mapper.AdminReviewMapper">
+
+    <!-- 顾客评价列表（顾客 -> 服务人员，对应 reviewerRole=1, reviewTarget=2） -->
+    <select id="selectCustomerReviews" resultType="housekeeping.housekeepingnow.dto.AdminReviewSummaryDTO">
+        SELECT
+            r.review_id        AS reviewId,
+            a.appointment_id   AS appointmentId,
+            a.staff_id         AS staffId,
+            s.name             AS staffName,
+            a.customer_id      AS customerId,
+            c.name             AS customerName,
+            r.overall_rating   AS overallRating,
+            r.service_attitude_rating       AS serviceAttitudeRating,
+            r.professional_ability_rating   AS professionalAbilityRating,
+            r.service_quality_rating        AS serviceQualityRating,
+            r.review_content   AS reviewContent,
+            r.is_anonymous     AS isAnonymous,
+            r.create_time      AS createTime,
+            1                  AS reviewerRole,
+            2                  AS reviewTarget
+        FROM review r
+        JOIN appointment a      ON r.appointment_id = a.appointment_id
+        JOIN staff s            ON a.staff_id = s.staff_id
+        JOIN customer_detail c  ON a.customer_id = c.customer_id
+        <where>
+            <if test="staffId != null">
+                AND a.staff_id = #{staffId}
+            </if>
+            <if test="appointmentId != null">
+                AND a.appointment_id = #{appointmentId}
+            </if>
+        </where>
+        ORDER BY r.create_time DESC
+    </select>
+
+    <!-- 员工自评列表（服务人员 -> 自己，对应 reviewerRole=2, reviewTarget=2） -->
+    <select id="selectStaffSelfReviews" resultType="housekeeping.housekeepingnow.dto.AdminReviewSummaryDTO">
+        SELECT
+            e.review_extra_id  AS reviewId,
+            a.appointment_id   AS appointmentId,
+            a.staff_id         AS staffId,
+            s.name             AS staffName,
+            a.customer_id      AS customerId,
+            c.name             AS customerName,
+            e.overall_rating   AS overallRating,
+            NULL               AS serviceAttitudeRating,
+            NULL               AS professionalAbilityRating,
+            NULL               AS serviceQualityRating,
+            e.review_content   AS reviewContent,
+            0                  AS isAnonymous,
+            e.create_time      AS createTime,
+            2                  AS reviewerRole,
+            2                  AS reviewTarget
+        FROM review_extra e
+        JOIN appointment a      ON e.appointment_id = a.appointment_id
+        JOIN staff s            ON a.staff_id = s.staff_id
+        JOIN customer_detail c  ON a.customer_id = c.customer_id
+        WHERE e.reviewer_role = 2
+          AND e.review_target = 2
+        <if test="staffId != null">
+            AND a.staff_id = #{staffId}
+        </if>
+        <if test="appointmentId != null">
+            AND a.appointment_id = #{appointmentId}
+        </if>
+        ORDER BY e.create_time DESC
+    </select>
+
+</mapper>
+

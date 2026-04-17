@@ -21,7 +21,9 @@
                   placeholder="请选择服务类型"
                   clearable
                   @change="loadServices"
+                  style="width: 180px;"
                 >
+                  <el-option label="全部" value="all" />
                   <el-option
                     v-for="type in serviceTypes"
                     :key="type.value"
@@ -36,8 +38,9 @@
                   placeholder="请选择状态"
                   clearable
                   @change="loadServices"
+                  style="width: 180px;"
                 >
-                  <el-option label="全部" :value="''" />
+                  <el-option label="全部" value="all" />
                   <el-option label="可用" :value="1" />
                   <el-option label="不可用" :value="0" />
                 </el-select>
@@ -241,8 +244,8 @@ const paginatedServices = computed(() => {
 })
 
 const filters = ref({
-  mainCategory: null, // 改为大类名称（字符串），未来可按大类筛选
-  availableStatus: undefined,
+  mainCategory: 'all', // 默认全部（避免空值导致下拉框显示placeholder）
+  availableStatus: 'all',
   keyword: ''
 })
 
@@ -339,17 +342,27 @@ const handleImageSuccess = (response) => {
 }
 
 const loadServices = async () => {
+  // 筛选条件变化后，回到第一页，避免当前页码超过结果页数导致“看起来搜不到”
+  currentPage.value = 1
   loading.value = true
   try {
     const params = {}
-    // 未来如果想按大类筛选，可以传递 mainCategory 参数
-    // if (filters.value.mainCategory) params.mainCategory = filters.value.mainCategory
-    if (filters.value.availableStatus !== undefined) {
+    // “全部”不传参；只有选择具体服务类型才传
+    if (filters.value.mainCategory && filters.value.mainCategory !== 'all') {
+      params.mainCategory = filters.value.mainCategory
+    }
+    // “全部”不传参；只有选择具体状态(0/1)才传
+    if (
+      filters.value.availableStatus !== undefined &&
+      filters.value.availableStatus !== null &&
+      filters.value.availableStatus !== 'all' &&
+      filters.value.availableStatus !== ''
+    ) {
       params.availableStatus = filters.value.availableStatus
     }
-    if (filters.value.keyword && filters.value.keyword.trim()) {
-      params.keyword = filters.value.keyword.trim()
-    }
+
+    // 关键词：为了支持“模糊查询”且避免后端 keyword 字段名/匹配口径不一致导致无法搜索
+    // 这里不把 keyword 透传给后端，而是拿到满足其他筛选条件的列表后再做前端模糊过滤。
 
     const response = await getAdminServices(params)
     // 统一处理响应数据格式
@@ -360,6 +373,16 @@ const loadServices = async () => {
       services.value = data.list
     } else {
       services.value = []
+    }
+
+    const kw = (filters.value.keyword || '').trim().toLowerCase()
+    if (kw) {
+      services.value = services.value.filter((row) => {
+        const serviceName = `${row?.serviceName ?? ''}`.toLowerCase()
+        const description = `${row?.description ?? ''}`.toLowerCase()
+        const mainCategory = `${row?.mainCategory ?? ''}`.toLowerCase()
+        return serviceName.includes(kw) || description.includes(kw) || mainCategory.includes(kw)
+      })
     }
     
     // 确保服务类型已加载（仅在首次加载时尝试）
@@ -382,8 +405,8 @@ const loadServices = async () => {
 
 const resetFilters = () => {
   filters.value = {
-    mainCategory: null,
-    availableStatus: undefined,
+    mainCategory: 'all',
+    availableStatus: 'all',
     keyword: ''
   }
   currentPage.value = 1 // 重置分页

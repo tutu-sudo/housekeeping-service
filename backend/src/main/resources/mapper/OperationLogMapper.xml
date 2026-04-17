@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="housekeeping.housekeepingnow.mapper.OperationLogMapper">
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="logId">
+        INSERT INTO operation_log (
+            user_id, operation_type, operation_module, operation_desc,
+            request_method, request_url, request_params,
+            ip_address, user_agent, operation_status, error_message
+        ) VALUES (
+            #{userId}, #{operationType}, #{operationModule}, #{operationDesc},
+            #{requestMethod}, #{requestUrl}, #{requestParams},
+            #{ipAddress}, #{userAgent}, #{operationStatus}, #{errorMessage}
+        )
+    </insert>
+
+</mapper>
+
+

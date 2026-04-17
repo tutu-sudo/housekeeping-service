@@ -62,6 +62,35 @@ const route = useRoute()
 const paymentInfo = ref(null)
 const appointmentId = ref(null)
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+
+const extractPaidFlag = (payload) => {
+  const data = payload?.data || payload || {}
+  const status =
+    data.paymentStatus ??
+    data.payment_status ??
+    data.status ??
+    data.paymentState ??
+    data.payment_state
+  const s = typeof status === 'string' ? parseInt(status, 10) : status
+  return s === 1 || status === 'paid' || status === 'success'
+}
+
+// 支付回跳后：短轮询确认（兼容 notify/return 延迟），确认已支付后再刷新订单视图
+const confirmPaymentStatus = async (id, maxAttempts = 10, intervalMs = 800) => {
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const res = await queryPaymentStatusByAppointment(id)
+      const payload = res?.data?.data || res?.data || res
+      if (extractPaidFlag(payload)) return { ok: true, payload }
+    } catch (e) {
+      // ignore and retry
+    }
+    await sleep(intervalMs)
+  }
+  return { ok: false, payload: null }
+}
+
 const loadPaymentInfo = async () => {
   // 从URL参数获取订单号和预约ID
   const outTradeNo = route.query.outTradeNo || ''
@@ -93,7 +122,10 @@ const loadPaymentInfo = async () => {
   // 如果有有效的appointmentId，查询支付状态
   if (appointmentId.value) {
     try {
-      const response = await queryPaymentStatusByAppointment(appointmentId.value)
+      // 先做一次短轮询确认，尽可能让前端“瞬间”拿到已支付
+      const confirm = await confirmPaymentStatus(appointmentId.value)
+      const response = confirm.ok ? { data: confirm.payload } : await queryPaymentStatusByAppointment(appointmentId.value)
+
       if (response.data) {
         const data = response.data.data || response.data
         paymentInfo.value = {
@@ -103,6 +135,14 @@ const loadPaymentInfo = async () => {
           paymentMethod: data.paymentMethod || 'alipay',
           paymentTime: data.paymentTime || new Date().toLocaleString(),
           appointmentId: appointmentId.value
+        }
+
+        // 标记“刚完成支付”，用于订单列表/详情页立刻刷新（避免等轮询）
+        try {
+          localStorage.setItem('lastPaidAppointmentId', String(appointmentId.value))
+          localStorage.setItem('lastPaidAt', String(Date.now()))
+        } catch (e) {
+          // ignore
         }
       } else {
         // 查询失败，使用基本信息
@@ -142,7 +182,10 @@ const loadPaymentInfo = async () => {
 
 const goToAppointmentDetail = () => {
   if (appointmentId.value) {
-    router.push(`/appointment/${appointmentId.value}`)
+    router.push({
+      path: `/appointment/${appointmentId.value}`,
+      query: { from: 'payment-success', refresh: 'true' }
+    })
   } else {
     // 跳转到个人中心的预约列表，并刷新数据
     router.push({

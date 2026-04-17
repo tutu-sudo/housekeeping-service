@@ -13,8 +13,14 @@
           <el-card>
             <el-form :inline="true" class="filter-form">
               <el-form-item label="工作状态">
-                <el-select v-model="filters.workStatus" placeholder="请选择状态" clearable @change="loadList">
-                  <el-option :value="''" label="全部" />
+                <el-select
+                  v-model="filters.workStatus"
+                  placeholder="请选择状态"
+                  clearable
+                  @change="loadList"
+                  style="width: 180px"
+                >
+                  <el-option value="all" label="全部" />
                   <el-option :value="1" label="正常" />
                   <el-option :value="0" label="不可服务" />
                   <el-option :value="2" label="警告" />
@@ -114,7 +120,7 @@ const route = useRoute()
 const loading = ref(false)
 const list = ref([])
 const filters = ref({
-  workStatus: '',
+  workStatus: 'all',
   keyword: ''
 })
 
@@ -158,7 +164,13 @@ const loadList = async () => {
     const params = {}
     // 只监控已审核通过的服务人员
     params.verificationStatus = 1
-    if (filters.value.workStatus !== '' && filters.value.workStatus !== undefined) {
+    // “全部”不传参；只有选择了具体状态(0/1/2/3)才传
+    if (
+      filters.value.workStatus !== 'all' &&
+      filters.value.workStatus !== '' &&
+      filters.value.workStatus !== undefined &&
+      filters.value.workStatus !== null
+    ) {
       params.workStatus = filters.value.workStatus
     }
     if (filters.value.keyword) {
@@ -199,7 +211,7 @@ const getRowClass = ({ row }) => {
 
 const resetFilters = () => {
   filters.value = {
-    workStatus: '',
+    workStatus: 'all',
     keyword: ''
   }
   currentPage.value = 1

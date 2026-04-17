@@ -779,7 +779,15 @@ import { getUserInfo } from '@/api/user'
 import { getStaffProfile } from '@/api/staff'
 import * as reviewsApi from '@/api/reviews'
 import { queryPaymentStatusByAppointment } from '@/api/payment'
-import { PAYMENT_STATUS_CONFIG, PAYMENT_STATUS } from '@/utils/constants'
+import { PAYMENT_STATUS } from '@/utils/constants'
+import {
+  normalizePaymentStatus,
+  isUnpaidPaymentStatus,
+  getPaymentStatusType as getUnifiedPaymentStatusType,
+  getPaymentStatusText as getUnifiedPaymentStatusText,
+  normalizePaymentFields
+} from '@/utils/payment'
+import { normalizeVisibleReview } from '@/utils/review'
 import Navigation from '@/components/common/Navigation.vue'
 import dayjs from 'dayjs'
 
@@ -820,10 +828,16 @@ const selfReviewForm = reactive({
   reviewContent: ''
 })
 const selfReviewSubmitting = ref(false)
+const hasStaffSelfReviewRaw = ref(false)
 
 // 缓存：customerId -> username
 const customerNameCache = new Map()
 const isBlank = (v) => v === null || v === undefined || String(v).trim() === ''
+
+const normalizeAppointmentRow = (row) => {
+  if (!row) return row
+  return normalizePaymentFields(row)
+}
 
 const pickId = (row, keys) => {
   for (const k of keys) {
@@ -919,6 +933,7 @@ const resetReviewBundleState = () => {
   staffSelfReviewBlock.value = null
   adminReviewForCustomerBlock.value = null
   adminReviewForStaffBlock.value = null
+  hasStaffSelfReviewRaw.value = false
   selfReviewForm.overallRating = 0
   selfReviewForm.reviewContent = ''
 }
@@ -930,16 +945,20 @@ const loadReviewBundle = async (appointmentId) => {
       // 兼容老版本：如果接口未提供，则直接跳过，不影响“我的评价”主列表
       return
     }
-    const res = await fn(appointmentId)
+    const res = await fn(appointmentId, { skipErrorHandler: true })
     const payload = res.data?.data || res.data || {}
-    const nr = (r) => (r ? normalizeReview(r) : null)
+    const nr = (r) => {
+      const visible = normalizeVisibleReview(r)
+      return visible ? normalizeReview(visible) : null
+    }
     customerReviewBlock.value = nr(payload.customerReview)
     staffSelfReviewBlock.value = nr(payload.staffSelfReview)
     adminReviewForCustomerBlock.value = nr(payload.adminReviewForCustomer)
     adminReviewForStaffBlock.value = nr(payload.adminReviewForStaff)
+    hasStaffSelfReviewRaw.value = !!payload.staffSelfReview
   } catch (e) {
     // 兼容后端尚未完全支持 bundle 接口的情况，不阻塞对话框打开
-    console.error('加载三方评价包失败', e)
+    console.warn('加载三方评价包失败，已降级展示', e)
   }
 }
 
@@ -955,8 +974,8 @@ const openReviewDetail = async (row) => {
 const canCreateSelfReview = computed(() => {
   if (!selectedReviewRow.value) return false
   const statusOk = Number(selectedReviewRow.value.status) === 3
-  const paidOk = Number(selectedReviewRow.value.paymentStatus) === PAYMENT_STATUS.PAID
-  const hasSelfReview = !!staffSelfReviewBlock.value
+  const paidOk = normalizePaymentStatus(selectedReviewRow.value) === PAYMENT_STATUS.PAID
+  const hasSelfReview = hasStaffSelfReviewRaw.value
   return statusOk && paidOk && !hasSelfReview
 })
 
@@ -1063,7 +1082,9 @@ const loadMyReviews = async () => {
 
     const map = new Map()
     for (const r of reviewList) {
-      const nr = normalizeReview(r)
+      const visible = normalizeVisibleReview(r)
+      if (!visible) continue
+      const nr = normalizeReview(visible)
       if (nr?.appointmentId) {
         map.set(Number(nr.appointmentId), nr)
       }
@@ -1172,14 +1193,12 @@ const getStatusText = (status) => {
 
 // 支付状态类型
 const getPaymentStatusType = (paymentStatus) => {
-  const config = PAYMENT_STATUS_CONFIG[paymentStatus]
-  return config?.type || 'info'
+  return getUnifiedPaymentStatusType(paymentStatus)
 }
 
 // 支付状态文本
 const getPaymentStatusText = (paymentStatus) => {
-  const config = PAYMENT_STATUS_CONFIG[paymentStatus]
-  return config?.text || '未知'
+  return getUnifiedPaymentStatusText(paymentStatus)
 }
 
 // 状态跟踪文本（用于tooltip）
@@ -1475,7 +1494,7 @@ const loadAppointments = async () => {
     }
     
     await enrichAppointmentNames(appointmentList)
-    appointments.value = appointmentList
+    appointments.value = appointmentList.map(normalizeAppointmentRow)
   } catch (error) {
     console.error('❌ 加载预约列表失败:', error)
     console.error('错误详情:', {
@@ -1498,23 +1517,11 @@ const viewAppointmentDetail = async (appointmentId) => {
     if (detail) {
       // 先补齐姓名等信息
       await enrichAppointmentNames([detail])
-      appointmentDetail.value = detail
+      appointmentDetail.value = normalizeAppointmentRow(detail)
       
       // 如果支付状态为"待支付"或"未知"，主动查询支付状态以触发后端自动同步
-      const paymentStatus = detail.paymentStatus !== undefined && detail.paymentStatus !== null
-        ? (typeof detail.paymentStatus === 'string' ? parseInt(detail.paymentStatus, 10) : detail.paymentStatus)
-        : (detail.payment_status !== undefined && detail.payment_status !== null
-          ? (typeof detail.payment_status === 'string' ? parseInt(detail.payment_status, 10) : detail.payment_status)
-          : 0)
-      
-      // 检查是否为待支付状态：0、null、undefined、'unpaid'、'0' 或 NaN
-      const isUnpaid = paymentStatus === 0 || 
-                       paymentStatus === null || 
-                       paymentStatus === undefined || 
-                       paymentStatus === 'unpaid' || 
-                       paymentStatus === '0' ||
-                       (typeof paymentStatus === 'string' && paymentStatus.trim() === '') ||
-                       (typeof paymentStatus === 'number' && isNaN(paymentStatus))
+      const paymentStatus = normalizePaymentStatus(detail)
+      const isUnpaid = isUnpaidPaymentStatus(paymentStatus)
       
       if (isUnpaid && appointmentId) {
         try {
@@ -1526,15 +1533,11 @@ const viewAppointmentDetail = async (appointmentId) => {
           if (refreshDetail) {
             // 重新补齐姓名等信息
             await enrichAppointmentNames([refreshDetail])
-            const newPaymentStatus = refreshDetail.paymentStatus !== undefined && refreshDetail.paymentStatus !== null
-              ? (typeof refreshDetail.paymentStatus === 'string' ? parseInt(refreshDetail.paymentStatus, 10) : refreshDetail.paymentStatus)
-              : (refreshDetail.payment_status !== undefined && refreshDetail.payment_status !== null
-                ? (typeof refreshDetail.payment_status === 'string' ? parseInt(refreshDetail.payment_status, 10) : refreshDetail.payment_status)
-                : 0)
+            const newPaymentStatus = normalizePaymentStatus(refreshDetail)
             
-            // 更新支付状态
-            appointmentDetail.value.paymentStatus = newPaymentStatus
-            appointmentDetail.value.payment_status = newPaymentStatus
+            // 更新支付状态（同时维护驼峰/下划线，避免模板与接口口径差异）
+            appointmentDetail.value.paymentStatus = normalizePaymentStatus(newPaymentStatus)
+            appointmentDetail.value.payment_status = normalizePaymentStatus(newPaymentStatus)
             
             // 如果支付状态已更新为已支付，提示用户
             if (newPaymentStatus === 1 && paymentStatus !== 1) {

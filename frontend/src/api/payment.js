@@ -90,9 +90,11 @@ export function createAlipayPaymentForm(appointmentId) {
 /**
  * 查询支付状态（根据预约ID）
  * @param {number|string} appointmentId 预约ID
+ * @param {Object} [options]
+ * @param {boolean} [options.skipErrorHandler] 是否跳过全局错误弹窗
  * @returns {Promise} 返回支付状态信息
  */
-export function queryPaymentStatusByAppointment(appointmentId) {
+export function queryPaymentStatusByAppointment(appointmentId, options = {}) {
   // 确保appointmentId是有效的数字
   const id = typeof appointmentId === 'string' ? parseInt(appointmentId, 10) : Number(appointmentId)
   if (isNaN(id) || id <= 0) {
@@ -101,7 +103,8 @@ export function queryPaymentStatusByAppointment(appointmentId) {
   
   return request({
     url: `/payment/status/${id}`,
-    method: 'get'
+    method: 'get',
+    skipErrorHandler: options.skipErrorHandler === true
   })
 }
 

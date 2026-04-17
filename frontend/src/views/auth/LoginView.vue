@@ -1,34 +1,51 @@
 <template>
-  <div class="login-container">
-    <el-card class="login-card">
-      <template #header>
-        <h2>登录</h2>
-      </template>
-      <el-form :model="loginForm" :rules="rules" ref="loginFormRef">
-        <el-form-item label="用户名" prop="username">
-          <el-input v-model="loginForm.username" placeholder="请输入用户名" />
-        </el-form-item>
-        <el-form-item label="密码" prop="password">
-          <el-input
-            v-model="loginForm.password"
-            type="password"
-            placeholder="请输入密码"
-            show-password
-          />
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="handleLogin" :loading="loading">
-            登录
-          </el-button>
-          <el-button @click="$router.push('/register')">注册</el-button>
-        </el-form-item>
-        <el-form-item>
-          <el-link type="primary" @click="$router.push('/forgot-password')" underline="never">
-            忘记密码？
-          </el-link>
-        </el-form-item>
-      </el-form>
-    </el-card>
+  <div class="auth-page">
+    <div class="auth-right">
+      <div class="auth-card">
+        <div class="auth-title">
+          <div class="auth-title__main">账号登录</div>
+          <div class="auth-title__sub">欢迎回来，请输入账号信息</div>
+        </div>
+
+        <el-form
+          ref="loginFormRef"
+          :model="loginForm"
+          :rules="rules"
+          label-position="top"
+          class="auth-form"
+        >
+          <el-form-item label="用户名" prop="username">
+            <el-input v-model="loginForm.username" placeholder="请输入用户名" />
+          </el-form-item>
+          <el-form-item label="密码" prop="password">
+            <el-input
+              v-model="loginForm.password"
+              type="password"
+              placeholder="请输入密码"
+              show-password
+            />
+          </el-form-item>
+
+          <div class="auth-actions">
+            <el-link
+              type="primary"
+              underline="never"
+              class="auth-forgot"
+              @click="$router.push('/forgot-password')"
+            >
+              忘记密码？
+            </el-link>
+          </div>
+
+          <div class="auth-buttons">
+            <el-button type="primary" @click="handleLogin" :loading="loading" class="auth-btn-primary">
+              登录
+            </el-button>
+            <el-button @click="$router.push('/register')" class="auth-btn-secondary">注册</el-button>
+          </div>
+        </el-form>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -120,20 +137,82 @@ const handleLogin = async () => {
 </script>
 
 <style scoped lang="scss">
-.login-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+.auth-page {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  background-image: url('@/assets/auth/login.png');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
-.login-card {
-  width: 400px;
-  
-  h2 {
-    text-align: center;
-    margin: 0;
+.auth-right {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 48px 24px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  margin-right: clamp(40px, 8vw, 140px);
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-radius: 14px;
+  padding: 28px 26px 24px;
+  box-shadow: 0 18px 42px rgba(18, 22, 33, 0.14);
+  backdrop-filter: blur(10px);
+}
+
+.auth-title {
+  margin-bottom: 18px;
+}
+
+.auth-title__main {
+  font-size: 22px;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: 0.2px;
+}
+
+.auth-title__sub {
+  margin-top: 6px;
+  font-size: 13px;
+  color: #6b7280;
+}
+
+.auth-form :deep(.el-form-item__label) {
+  color: #374151;
+  font-weight: 600;
+}
+
+.auth-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -6px;
+  margin-bottom: 12px;
+}
+
+.auth-buttons {
+  display: flex;
+  gap: 12px;
+}
+
+.auth-btn-primary,
+.auth-btn-secondary {
+  flex: 1 1 0;
+}
+
+@media (max-width: 960px) {
+  .auth-right {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .auth-card {
+    margin-right: 0;
   }
 }
 </style>

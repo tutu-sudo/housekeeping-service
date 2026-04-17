@@ -1,30 +1,160 @@
+spring:
+  application:
+    name: housekeeping-now
+  
+  # 数据源配置
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/housekeeping_service?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: 123456
+    hikari:
+      minimum-idle: 5
+      maximum-pool-size: 20
+      connection-timeout: 30000
+      idle-timeout: 600000
+      max-lifetime: 1800000
+  
+  # Redis配置
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: 
+      database: 0
+      timeout: 3000ms
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+  
+  # 文件上传配置
+  servlet:
+    multipart:
+      enabled: true
+      max-file-size: 10MB
+      max-request-size: 50MB
+  
+  # 邮件配置
+  mail:
+    host: smtp.qq.com
+    port: 587
+    username: your-email@qq.com
+    password: your-email-password
+    default-encoding: UTF-8
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+
+# MyBatis配置
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  type-aliases-package: housekeeping.housekeepingnow.entity
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.stdout.StdOutImpl
+
+# JWT配置
+jwt:
+  secret: housekeeping-now-secret-key-2024-please-change-in-production
+  expiration: 86400000 # 24小时，单位：毫秒
+  refresh-expiration: 604800000 # 7天，单位：毫秒
+
+# 支付配置
+payment:
+  # 支付宝配置（沙箱环境）
+  alipay:
+    app-id: 9021000159616281
+    private-key: MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQClGqUYR7HnRnFy8vyfm9Fi70lIZ1Ecmx+bGhnINSVYd33pmxdgP3eTukQVNmWyDdxnVF4A9SfTXSOd+u1rwu5OGUdirZYQ/u4Pi50KtS6K22KyIDN6zTk8YRUKbM5Col35+UAplKWmm/7biSvmOUw/zF8TtGbQ8lrb2YB8DGWycOoMelH1IxAkatAZnE9U212KPwnw413eGtfibOnhEOfQyCHRtuglRLMYytI1rcCRfdmV9i2qnIrzfQJMxGvxQI4AD9PwB+sxsEBBydisHAMGerKFHEpTTg7U0aKbwGizPLv/4yDOLFsf9hRJ8YI725/CtCx3aaKhhdWAIZUCas2tAgMBAAECggEAEcFzz9CmCUFCIiKPmHqhYgppzyeNSY5FL+D2tNlCUulG2UCcmvU4XuLBP6bB+QwUj+g608+JoOl7UxoRPm2QQ0Xkr3ALm3hPEczp7qTdhIFjc9SStLotVZj7MkvRQslDYga0J8Scq/ZKykFOP0waLyJDd1MHW6E0tEAH2U9cAHyH33G5pxe1IysS33A0WAWcuEKMycto3E/ynU78WVYiOfmsTnEXqbvU6XNaRtHoH6D63AOGuonmfrTKOECqbUxssVq+6+z7g8+j+sdg8dALUEV+xtQCIQHylmm3pGlSwRrFQWty+K7Ma+4f4g4x+YJzTvb55ZoCMX1LDDGRyUcP4QKBgQDbQevqg8KHAqeM9/yK8QOy9r/UZXf8LPqe1lzDJ+Wf3144jzOUS8p6wDQRubjVhJlDVGwITZeGTL8DHEMygPX+EUv1NXfB5jk/k9/fNI1bKD2AuqzndSD44lcbS+WpM1ACEjjmOLwkz5XCvjXvSkhOUI7+tiXeEOlnClI/tJzA1wKBgQDAxY7yBPEXHtlq2XLhcI6PDGd9KOfxid5M5/kipL0Fr+ROquzgYxW6n8VmU2oPUSONW3W0sGSUwaWN+JvcPJwkf8jMwtkd7vI3OGXqmq5u5ze1RBYkytmPGwDYvfLlejP6SOGR5d1Iz9kPk/BQHwkeQKnxJfQoGzxgKvaifpdhGwKBgEk78ZK5Q8ZYqqI5So8WBYhHRreo1LTUSTm4m+9LajVGJHB71FyaHB14CWxKPmSDD7Yfgp4bXJstEzf0vrUlwgSEvnw+yatoPILx33rsULK79B8FOy9sPgEjiLjDVwh27Shj8cFj/ePFul37roQoqZIO8lQ9ftR3jZ4vIl3I8/qtAoGBAJZFavkfARGU6sdwWy2CIJ9CfCoFCUowvyoUaxGmefNE+iSY+a6xju68PZVW0Qa/qYc4FLmWB9IuYnAZrOYyGUYalt2HxtievBJv1ILdsbyiYbrcKKblulLkKfTLnd1lNb+VsMGa/rUT0ZFjMaJDj0gWAGQLwhjBon8U/s4NANShAoGAFN872FoMN9S3DxvlTy51Iu1ZFB/sgd8myXwJM8jgWPbPl2xH/vgxbEWKF3zp/DFWpsvbCgjy96ZqJAfMRY+xOyyTwtKfVgXBwUA6qEp9r6f6JIgCbkrzy9h26xUhTWsPh0oTqeilNBXMAmAOWWue/6f/pWBUKdjMqy2lM6BV5dc=
+    public-key: MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAqWw8z8MZHpninCt878pe74UW7Q6dDycQ6DH6qBwrqGfc4fWI43j66+O1z4/R+5zq/xsxEwgqROQswlWmnwORvVaEhuZaGvCyp+p6FgN3ZtuQB9cm0HWhD8AcCWXY5nYdXliLVkIN85elpqUw973SeX9a8Od2bvqmhQjeYnlrT+LgoTnlaLcdm0qABrjYyDV3dZ7lSxJpYlUQRpqSDrHhrFWtZkdmR6NNd4dNNsFbIxU8HScJMhTQTUKhcLhJ4HYCye5V6tKv6ntWOKbLzF43wj6AACc98RZUSeKrmGK8He7UU/f2u3lJ3nPIA15s7c7WjsMZz3XhY1SxWm6o97g+awIDAQAB
+    gateway-url: https://openapi-sandbox.dl.alipaydev.com/gateway.do
+    notify-url: http://g2856996.natappfree.cc/api/payment/alipay/notify
+    return-url: http://g2856996.natappfree.cc/api/payment/alipay/return
+    # 支付完成后由后端同步回调处理完毕，再跳转回前端落地页（用于前端展示并触发一次状态刷新）
+    # 你可以按前端路由修改为实际页面，例如：
+    # - http://localhost:3000/#/customer/orders （顾客订单页）
+    # - http://localhost:3000/#/payment/success （支付成功页）
+    frontend-success-url: http://localhost:3000/#/payment/success
+    frontend-fail-url: http://localhost:3000/#/payment/fail
+    # 沙箱买家UID（用于测试）
+    sandbox-buyer-id: 2088721092619762
+  
+  # 微信支付配置
+  wechat:
+    app-id: your-wechat-app-id
+    mch-id: your-wechat-mch-id
+    api-v3-key: your-wechat-api-v3-key
+    cert-path: classpath:cert/wechat/apiclient_cert.pem
+    private-key-path: classpath:cert/wechat/apiclient_key.pem
+    notify-url: http://your-domain.com/api/payment/wechat/notify
+
+# 文件存储配置
+file:
+  upload:
+    path: D:/housekeeping-uploads/
+    url-prefix: http://localhost:8080/uploads/
+  certificate:
+    path: D:/housekeeping-uploads/certificates/
+    allowed-types: pdf,jpg,jpeg,png
+
+# 短信服务配置
+sms:
+  provider: aliyun # aliyun, tencent
+  aliyun:
+    access-key-id: your-aliyun-access-key-id
+    access-key-secret: your-aliyun-access-key-secret
+    sign-name: 家政服务
+    template-code: SMS_123456789
+  tencent:
+    secret-id: your-tencent-secret-id
+    secret-key: your-tencent-secret-key
+    app-id: your-tencent-app-id
+    sign-name: 家政服务
+
+# Swagger配置
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    enabled: true
+    tags-sorter: alpha
+    operations-sorter: alpha
+  info:
+    title: 家政服务预约平台API文档
+    description: 家政服务预约平台接口文档
+    version: 1.0.0
+    contact:
+      name: 开发团队
+      email: dev@housekeeping.com
+
+# 日志配置
+logging:
+  level:
+    root: INFO
+    housekeeping.housekeepingnow: DEBUG
+    org.springframework.web: INFO
+    org.mybatis: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{50} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{50} - %msg%n"
+  file:
+    name: logs/housekeeping-now.log
+    max-size: 10MB
+    max-history: 30
+
 # 服务器配置
 server:
-  port: 8080  # 端口可改为8081（若8080被占用）
+  port: 8080
   servlet:
-    context-path: /  # 上下文路径，默认/即可
+    context-path: /
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
 
-# Spring核心配置
-spring:
-  # 数据库配置（必须匹配你的本地MySQL）
-  datasource:
-    url: jdbc:mysql://localhost:3306/housekeeping_service01?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: root  # 替换为你的MySQL用户名（默认root）
-    password: 123456  # 替换为你的MySQL密码（无密码则留空""）
-    driver-class-name: com.mysql.cj.jdbc.Driver
-  # 校验配置（适配Java 17的jakarta.validation）
-  validation:
-    enable: true
-
-# MyBatis配置（可选，确保Mapper扫描）
-mybatis:
-  mapper-locations: classpath:com/example/housekeepingservice/mapper/*.xml  # 扫描Mapper XML文件
-  type-aliases-package: com.example.housekeepingservice.entity  # 实体类别名包
-  configuration:
-    map-underscore-to-camel-case: true  # 下划线转驼峰（如create_time→createTime）
-
-# JWT配置（核心：解决jwt.secret解析失败）
-jwt:
-  secret: housekeeping_biye_2024  # 密钥，随便写，毕设够用
-  expire: 86400000                # Token过期时间：24小时（毫秒）
-  header: Token                   # 前端传Token的请求头字段名

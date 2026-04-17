@@ -24,9 +24,19 @@
               </el-button>
             </div>
           </div>
+          <el-alert
+            v-if="!dateRange || dateRange.length === 0"
+            type="info"
+            :closable="false"
+            style="margin-bottom: 20px"
+          >
+            <template #default>
+              <span>未选择日期范围时，默认查询最近30天的数据</span>
+            </template>
+          </el-alert>
           
-          <!-- 收入统计 -->
-          <el-card style="margin-bottom: 20px">
+          <!-- 数据统计分析：收入统计、订单统计、客户行为分析 -->
+          <el-card v-if="analysisType === 'data'" style="margin-bottom: 20px">
             <template #header>
               <h3>收入统计</h3>
             </template>
@@ -69,7 +79,7 @@
           </el-card>
           
           <!-- 订单统计 -->
-          <el-card style="margin-bottom: 20px">
+          <el-card v-if="analysisType === 'data'" style="margin-bottom: 20px">
             <template #header>
               <h3>订单统计</h3>
             </template>
@@ -89,8 +99,8 @@
             </el-row>
           </el-card>
           
-          <!-- 服务类型占比统计 -->
-          <el-card style="margin-bottom: 20px">
+          <!-- 服务统计分析：服务类型占比 + 服务质量分析 -->
+          <el-card v-if="analysisType === 'service'" style="margin-bottom: 20px">
             <template #header>
               <h3>服务类型订单占比</h3>
             </template>
@@ -128,7 +138,7 @@
           </el-card>
           
           <!-- 服务质量分析 -->
-          <el-card style="margin-bottom: 20px">
+          <el-card v-if="analysisType === 'service'" style="margin-bottom: 20px">
             <template #header>
               <h3>服务质量分析</h3>
             </template>
@@ -169,8 +179,8 @@
             </div>
           </el-card>
           
-          <!-- 客户行为分析 -->
-          <el-card>
+          <!-- 客户行为分析（仍归属于数据统计分析） -->
+          <el-card v-if="analysisType === 'data'">
             <template #header>
               <h3>客户行为分析</h3>
             </template>
@@ -204,7 +214,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, watch } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { Refresh, Money, CreditCard, Document, Star } from '@element-plus/icons-vue'
 import { getStatisticsData } from '@/api/admin'
 import { ElMessage } from 'element-plus'
@@ -220,6 +230,7 @@ import {
 import * as echarts from 'echarts'
 import Navigation from '@/components/common/Navigation.vue'
 import AdminSidebar from '@/components/admin/AdminSidebar.vue'
+import { useRoute } from 'vue-router'
 
 use([
   CanvasRenderer,
@@ -234,6 +245,9 @@ use([
 
 const loading = ref(false)
 const dateRange = ref([])
+// 当前统计视图类型：根据路由 query.analysisType 区分数据统计分析 / 服务统计分析
+const route = useRoute()
+const analysisType = ref(route.query.analysisType === 'service' ? 'service' : 'data')
 
 const revenueChartRef = ref(null)
 const serviceTypeChartRef = ref(null)
@@ -265,32 +279,40 @@ const statistics = ref({
 const serviceTypeStats = ref([])
 const ratingDistribution = ref([])
 
-// 初始化图表
-const initCharts = async () => {
+// 确保图表已初始化（如果容器存在但图表未初始化，则初始化）
+const ensureChartsInitialized = async () => {
   await nextTick()
   
-  // 初始化收入趋势图
-  if (revenueChartRef.value && !revenueChart) {
+  // 初始化收入趋势图（仅在数据统计分析页面显示）
+  if (analysisType.value === 'data' && revenueChartRef.value && !revenueChart) {
     revenueChart = echarts.init(revenueChartRef.value)
   }
   
-  // 初始化服务类型占比图
-  if (serviceTypeChartRef.value && !serviceTypeChart) {
+  // 初始化服务类型占比图（仅在服务统计分析页面显示）
+  if (analysisType.value === 'service' && serviceTypeChartRef.value && !serviceTypeChart) {
     serviceTypeChart = echarts.init(serviceTypeChartRef.value)
   }
   
-  // 初始化客户活跃度图
-  if (customerActivityChartRef.value && !customerActivityChart) {
+  // 初始化客户活跃度图（仅在数据统计分析页面显示）
+  if (analysisType.value === 'data' && customerActivityChartRef.value && !customerActivityChart) {
     customerActivityChart = echarts.init(customerActivityChartRef.value)
   }
+  }
   
+// 初始化图表（页面首次加载时调用）
+const initCharts = async () => {
+  await ensureChartsInitialized()
   updateCharts()
 }
 
 // 更新图表数据
-const updateCharts = () => {
+const updateCharts = async () => {
+  // 确保图表已初始化
+  await ensureChartsInitialized()
+  
   // 更新收入趋势图
-  if (revenueChart) {
+  if (revenueChart && revenueChartRef.value) {
+    const revenueData = statistics.value.revenueTrend || []
     const option = {
       title: {
         text: '收入趋势',
@@ -298,11 +320,15 @@ const updateCharts = () => {
       },
       tooltip: {
         trigger: 'axis',
-        formatter: '{b}<br/>{a}: ¥{c}'
+        formatter: (params) => {
+          const param = params[0]
+          return `${param.name}<br/>${param.seriesName}: ¥${param.value}`
+        }
       },
       xAxis: {
         type: 'category',
-        data: statistics.value.revenueTrend?.map(item => item.date) || []
+        data: revenueData.map(item => item.date) || [],
+        boundaryGap: false
       },
       yAxis: {
         type: 'value',
@@ -313,18 +339,41 @@ const updateCharts = () => {
       series: [{
         name: '收入',
         type: 'line',
-        data: statistics.value.revenueTrend?.map(item => item.amount) || [],
+        data: revenueData.map(item => item.amount) || [],
         smooth: true,
         itemStyle: {
           color: '#409EFF'
+        },
+        areaStyle: {
+          color: {
+            type: 'linear',
+            x: 0,
+            y: 0,
+            x2: 0,
+            y2: 1,
+            colorStops: [{
+              offset: 0,
+              color: 'rgba(64, 158, 255, 0.3)'
+            }, {
+              offset: 1,
+              color: 'rgba(64, 158, 255, 0.1)'
+            }]
+          }
         }
-      }]
+      }],
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        containLabel: true
+      }
     }
-    revenueChart.setOption(option)
+    revenueChart.setOption(option, true)
+    revenueChart.resize()
   }
   
   // 更新服务类型占比图
-  if (serviceTypeChart && serviceTypeStats.value.length > 0) {
+  if (serviceTypeChart && serviceTypeChartRef.value && serviceTypeStats.value.length > 0) {
     const option = {
       title: {
         text: '服务类型订单占比',
@@ -332,58 +381,95 @@ const updateCharts = () => {
       },
       tooltip: {
         trigger: 'item',
-        formatter: '{b}: {c} ({d}%)'
+        formatter: '{b}: {c} 单 ({d}%)'
       },
       legend: {
         orient: 'vertical',
-        left: 'left'
+        left: 'left',
+        top: 'middle'
       },
       series: [{
         type: 'pie',
-        radius: '60%',
-        data: serviceTypeStats.value.map(item => ({
-          value: item.orderCount,
-          name: item.serviceTypeName
-        })),
+        radius: ['40%', '70%'],
+        center: ['60%', '50%'],
+        avoidLabelOverlap: false,
+        itemStyle: {
+          borderRadius: 10,
+          borderColor: '#fff',
+          borderWidth: 2
+        },
+        label: {
+          show: true,
+          formatter: '{b}\n{d}%'
+        },
         emphasis: {
+          label: {
+            show: true,
+            fontSize: 16,
+            fontWeight: 'bold'
+          },
           itemStyle: {
             shadowBlur: 10,
             shadowOffsetX: 0,
             shadowColor: 'rgba(0, 0, 0, 0.5)'
           }
-        }
+        },
+        data: serviceTypeStats.value.map(item => ({
+          value: item.orderCount,
+          name: item.serviceTypeName
+        }))
       }]
     }
-    serviceTypeChart.setOption(option)
+    serviceTypeChart.setOption(option, true)
+    serviceTypeChart.resize()
   }
   
   // 更新客户活跃度图
-  if (customerActivityChart) {
+  if (customerActivityChart && customerActivityChartRef.value) {
+    const activityData = statistics.value.customerActivityTrend || []
     const option = {
       title: {
         text: '客户活跃度趋势',
         left: 'center'
       },
       tooltip: {
-        trigger: 'axis'
+        trigger: 'axis',
+        formatter: (params) => {
+          const param = params[0]
+          return `${param.name}<br/>${param.seriesName}: ${param.value} 人`
+        }
       },
       xAxis: {
         type: 'category',
-        data: statistics.value.customerActivityTrend?.map(item => item.date) || []
+        data: activityData.map(item => item.date) || [],
+        boundaryGap: true
       },
       yAxis: {
-        type: 'value'
+        type: 'value',
+        name: '活跃客户数'
       },
       series: [{
         name: '活跃客户数',
         type: 'bar',
-        data: statistics.value.customerActivityTrend?.map(item => item.count) || [],
+        data: activityData.map(item => item.count) || [],
         itemStyle: {
-          color: '#67C23A'
+          color: '#67C23A',
+          borderRadius: [4, 4, 0, 0]
+        },
+        label: {
+          show: true,
+          position: 'top'
         }
-      }]
+      }],
+      grid: {
+        left: '3%',
+        right: '4%',
+        bottom: '3%',
+        containLabel: true
+      }
     }
-    customerActivityChart.setOption(option)
+    customerActivityChart.setOption(option, true)
+    customerActivityChart.resize()
   }
 }
 
@@ -409,39 +495,47 @@ const loadStatistics = async () => {
     }
     
     const response = await getStatisticsData(params)
-    const data = response.data?.data || response.data || {}
+    
+    // 检查响应格式：后端返回 {code: 200, message: "success", data: {...}}
+    const resData = response.data
+    if (resData && resData.code !== undefined && resData.code !== 200) {
+      throw new Error(resData.message || '获取统计数据失败')
+    }
+    
+    // 获取实际统计数据
+    const data = resData?.data || resData || {}
     
     // 更新统计数据
     statistics.value = {
-      totalRevenue: data.totalRevenue || 0,
-      alipayRevenue: data.alipayRevenue || 0,
-      wechatRevenue: data.wechatRevenue || 0,
-      paidOrdersCount: data.paidOrdersCount || 0,
-      totalOrders: data.totalOrders || 0,
-      completedOrders: data.completedOrders || 0,
-      inProgressOrders: data.inProgressOrders || 0,
-      pendingOrders: data.pendingOrders || 0,
-      avgRating: data.avgRating || 0,
-      totalReviews: data.totalReviews || 0,
-      avgServiceAttitude: data.avgServiceAttitude || 0,
-      avgProfessionalAbility: data.avgProfessionalAbility || 0,
-      totalCustomers: data.totalCustomers || 0,
-      activeCustomers: data.activeCustomers || 0,
-      avgOrderAmount: data.avgOrderAmount || 0,
-      repeatPurchaseRate: data.repeatPurchaseRate || 0,
-      revenueTrend: data.revenueTrend || [],
-      customerActivityTrend: data.customerActivityTrend || []
+      totalRevenue: data.totalRevenue ?? 0,
+      alipayRevenue: data.alipayRevenue ?? 0,
+      wechatRevenue: data.wechatRevenue ?? 0,
+      paidOrdersCount: data.paidOrdersCount ?? 0,
+      totalOrders: data.totalOrders ?? 0,
+      completedOrders: data.completedOrders ?? 0,
+      inProgressOrders: data.inProgressOrders ?? 0,
+      pendingOrders: data.pendingOrders ?? 0,
+      avgRating: data.avgRating ?? 0,
+      totalReviews: data.totalReviews ?? 0,
+      avgServiceAttitude: data.avgServiceAttitude ?? 0,
+      avgProfessionalAbility: data.avgProfessionalAbility ?? 0,
+      totalCustomers: data.totalCustomers ?? 0,
+      activeCustomers: data.activeCustomers ?? 0,
+      avgOrderAmount: data.avgOrderAmount ?? 0,
+      repeatPurchaseRate: data.repeatPurchaseRate ?? 0,
+      revenueTrend: Array.isArray(data.revenueTrend) ? data.revenueTrend : [],
+      customerActivityTrend: Array.isArray(data.customerActivityTrend) ? data.customerActivityTrend : []
     }
     
     // 更新服务类型统计
     const totalOrders = data.totalOrders || 1 // 避免除以0
-    serviceTypeStats.value = (data.serviceTypeStats || []).map(item => {
-      const orderCount = item.orderCount || 0
-      const paidCount = item.paidCount || 0
+    serviceTypeStats.value = (Array.isArray(data.serviceTypeStats) ? data.serviceTypeStats : []).map(item => {
+      const orderCount = item.orderCount ?? 0
+      const paidCount = item.paidCount ?? 0
       return {
         ...item,
         orderCount,
-        totalRevenue: item.totalRevenue || 0,
+        totalRevenue: item.totalRevenue ?? 0,
         percentage: totalOrders > 0 ? parseFloat(((orderCount / totalOrders) * 100).toFixed(2)) : 0,
         paymentRate: orderCount > 0 ? parseFloat(((paidCount / orderCount) * 100).toFixed(2)) : 0
       }
@@ -449,25 +543,52 @@ const loadStatistics = async () => {
     
     // 更新评分分布
     const totalReviewCount = data.totalReviews || 1
-    ratingDistribution.value = (data.ratingDistribution || []).map(item => ({
+    ratingDistribution.value = (Array.isArray(data.ratingDistribution) ? data.ratingDistribution : []).map(item => ({
       ...item,
       percentage: totalReviewCount > 0 ? parseFloat(((item.count / totalReviewCount) * 100).toFixed(2)) : 0
     }))
     
-    // 更新图表
-    updateCharts()
+    // 更新图表（等待DOM更新后再更新图表）
+    await nextTick()
+    await updateCharts()
+    
+    // 成功提示（可选，如果数据为空则提示）
+    if (data.totalOrders === 0 && data.totalRevenue === 0) {
+      ElMessage.info('当前时间范围内暂无数据')
+    }
   } catch (error) {
     console.error('获取统计数据失败:', error)
-    // 如果接口不存在，使用模拟数据
-    ElMessage.warning('统计数据接口暂未实现，显示模拟数据')
-    loadMockData()
+    
+    // 根据错误类型给出不同提示
+    if (error.response) {
+      const status = error.response.status
+      if (status === 404) {
+        ElMessage.error('统计数据接口不存在，请联系后端开发人员')
+      } else if (status === 401) {
+        ElMessage.error('未授权，请重新登录')
+      } else if (status === 403) {
+        ElMessage.error('无权限访问统计数据')
+      } else {
+        ElMessage.error(error.message || '获取统计数据失败，请稍后重试')
+      }
+    } else if (error.code === 'ECONNABORTED') {
+      ElMessage.error('请求超时，请检查网络连接')
+    } else {
+      ElMessage.error(error.message || '获取统计数据失败，请稍后重试')
+    }
+    
+    // 开发环境下可以使用模拟数据，生产环境不建议
+    if (import.meta.env.DEV) {
+      console.warn('开发环境：使用模拟数据')
+      await loadMockData()
+    }
   } finally {
     loading.value = false
   }
 }
 
 // 加载模拟数据（用于开发测试）
-const loadMockData = () => {
+const loadMockData = async () => {
   statistics.value = {
     totalRevenue: 125000.50,
     alipayRevenue: 80000.30,
@@ -521,24 +642,80 @@ const loadMockData = () => {
     { rating: 1, count: 2, percentage: 2.1 }
   ]
   
-  updateCharts()
+  await nextTick()
+  await updateCharts()
 }
 
 // 监听窗口大小变化，调整图表大小
-watch(() => serviceTypeStats.value, () => {
-  updateCharts()
-}, { deep: true })
+watch(
+  () => serviceTypeStats.value,
+  async () => {
+    await nextTick()
+    await updateCharts()
+  },
+  { deep: true }
+)
+
+// 监听分析视图切换（通过路由 query 切换），重新初始化并更新图表
+watch(
+  () => route.query.analysisType,
+  async (val) => {
+    analysisType.value = val === 'service' ? 'service' : 'data'
+    
+    // 销毁旧图表实例（如果存在）
+    if (revenueChart) {
+      revenueChart.dispose()
+      revenueChart = null
+    }
+    if (serviceTypeChart) {
+      serviceTypeChart.dispose()
+      serviceTypeChart = null
+    }
+    if (customerActivityChart) {
+      customerActivityChart.dispose()
+      customerActivityChart = null
+    }
+    
+    // 等待DOM更新后重新初始化图表
+    await nextTick()
+    await ensureChartsInitialized()
+    await updateCharts()
+  }
+)
+
+// 窗口大小变化处理函数
+const handleResize = () => {
+  revenueChart?.resize()
+  serviceTypeChart?.resize()
+  customerActivityChart?.resize()
+}
 
 onMounted(async () => {
   await initCharts()
   loadStatistics()
   
   // 监听窗口大小变化
-  window.addEventListener('resize', () => {
-    revenueChart?.resize()
-    serviceTypeChart?.resize()
-    customerActivityChart?.resize()
-  })
+  window.addEventListener('resize', handleResize)
+})
+
+// 组件卸载时清理图表实例
+onUnmounted(() => {
+  // 移除窗口大小监听
+  window.removeEventListener('resize', handleResize)
+  
+  // 销毁图表实例
+  if (revenueChart) {
+    revenueChart.dispose()
+    revenueChart = null
+  }
+  if (serviceTypeChart) {
+    serviceTypeChart.dispose()
+    serviceTypeChart = null
+  }
+  if (customerActivityChart) {
+    customerActivityChart.dispose()
+    customerActivityChart = null
+  }
 })
 </script>
 

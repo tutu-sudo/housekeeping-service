@@ -16,10 +16,8 @@
             :value="service.id"
           />
         </el-select>
-        <div v-if="currentBillingType" style="margin-top: 5px; font-size: 12px; color: #4CAF50;">
-          <span v-if="currentBillingType === 'hourly'">💡 按小时结算：根据服务时长和定价结算</span>
-          <span v-else-if="currentBillingType === 'daily'">💡 按天结算：不满一天按一天计算</span>
-          <span v-else-if="currentBillingType === 'times'">💡 按次数结算：一次多少钱</span>
+        <div style="margin-top: 5px; font-size: 12px; color: #4CAF50;">
+          <span>💡 所有服务均按小时结算：根据服务时长 × 单价计费，且每个服务有自己的最低服务时长</span>
         </div>
       </el-form-item>
       
@@ -54,45 +52,13 @@
         </div>
       </el-card>
       
-      <!-- 按次数结算的服务：只需要日期和时间 -->
-      <template v-if="currentBillingType === 'times'">
-      <el-form-item label="预约日期" prop="appointmentDate">
-        <el-date-picker
-          v-model="form.appointmentDate"
-          type="date"
-            placeholder="选择服务日期"
-            format="YYYY-MM-DD"
-            value-format="YYYY-MM-DD"
-            style="width: 100%"
-            :disabled-date="disabledDate"
-          />
-          <div style="margin-top: 5px; font-size: 12px; color: #999;">
-            提示：按次数结算，一次多少钱
-          </div>
-        </el-form-item>
-        
-        <el-form-item label="服务时间" prop="startTime">
-          <el-time-picker
-            v-model="form.startTime"
-            placeholder="选择服务时间"
-            format="HH:mm"
-            value-format="HH:mm"
-            style="width: 100%"
-            :disabled="!form.appointmentDate"
-          />
-        </el-form-item>
-        
-        <el-form-item label="结算说明">
-          <el-input 
-            value="按次数结算（一次多少钱）" 
-            disabled
-            style="width: 100%"
-          />
-        </el-form-item>
-      </template>
-      
-      <!-- 按小时结算的服务：需要开始和结束时间（支持跨天） -->
-      <template v-else-if="currentBillingType === 'hourly'">
+      <!-- 服务时间（统一按小时结算，支持跨天） -->
+      <div
+        v-if="requiresWorkingHoursLimit"
+        style="margin: -4px 0 10px 120px; font-size: 12px; color: #e6a23c;"
+      >
+        服务项目工作时间是早上6点到晚上9点
+      </div>
         <el-form-item label="开始日期" prop="appointmentDate">
           <el-date-picker
             v-model="form.appointmentDate"
@@ -104,7 +70,7 @@
           :disabled-date="disabledDate"
         />
           <div style="margin-top: 5px; font-size: 12px; color: #999;">
-            提示：按小时结算，根据服务时长和定价结算
+            提示：所有服务按小时结算，根据开始和结束时间计算服务时长
           </div>
       </el-form-item>
       
@@ -116,7 +82,7 @@
           value-format="HH:mm"
           style="width: 100%"
             :disabled="!form.appointmentDate"
-          @change="calculateDuration"
+          @change="handleStartTimeChange"
         />
       </el-form-item>
       
@@ -124,16 +90,16 @@
           <el-date-picker
             v-model="form.endDateTime"
             type="datetime"
-            placeholder="选择服务结束日期和时间（可跨天）"
+            placeholder="选择服务结束日期和时间"
             format="YYYY-MM-DD HH:mm"
             value-format="YYYY-MM-DD HH:mm"
             style="width: 100%"
             :disabled="!form.appointmentDate || !form.startTime"
             :disabled-date="disabledEndDate"
-            @change="calculateDuration"
+            @change="handleEndDateTimeChange"
           />
           <div style="margin-top: 5px; font-size: 12px; color: #999;">
-            提示：结束时间可以选择其他日期，支持跨天服务
+            提示：{{ endDateTimeHintText }}
           </div>
         </el-form-item>
         
@@ -144,62 +110,6 @@
             style="width: 100%"
           />
         </el-form-item>
-      </template>
-      
-      <!-- 按天结算的服务：需要开始和结束时间（支持跨天，不满一天按一天计算） -->
-      <template v-else-if="currentBillingType === 'daily'">
-        <el-form-item label="开始日期" prop="appointmentDate">
-          <el-date-picker
-            v-model="form.appointmentDate"
-            type="date"
-            placeholder="选择服务开始日期"
-            format="YYYY-MM-DD"
-            value-format="YYYY-MM-DD"
-            style="width: 100%"
-            :disabled-date="disabledDate"
-          />
-          <div style="margin-top: 5px; font-size: 12px; color: #999;">
-            提示：按天结算，不满一天按一天计算
-          </div>
-        </el-form-item>
-        
-        <el-form-item label="开始时间" prop="startTime">
-        <el-time-picker
-            v-model="form.startTime"
-            placeholder="选择服务开始时间"
-          format="HH:mm"
-          value-format="HH:mm"
-          style="width: 100%"
-            :disabled="!form.appointmentDate"
-          @change="calculateDuration"
-        />
-      </el-form-item>
-      
-        <el-form-item label="结束时间" prop="endDateTime">
-          <el-date-picker
-            v-model="form.endDateTime"
-            type="datetime"
-            placeholder="选择服务结束日期和时间（可跨天）"
-            format="YYYY-MM-DD HH:mm"
-            value-format="YYYY-MM-DD HH:mm"
-            style="width: 100%"
-            :disabled="!form.appointmentDate || !form.startTime"
-            :disabled-date="disabledEndDate"
-            @change="calculateDuration"
-          />
-          <div style="margin-top: 5px; font-size: 12px; color: #999;">
-            提示：结束时间可以选择其他日期，支持跨天服务。不满一天按一天计算
-          </div>
-        </el-form-item>
-        
-        <el-form-item label="服务天数" v-if="serviceInfo">
-        <el-input 
-            :value="serviceInfo" 
-          disabled
-          style="width: 100%"
-        />
-      </el-form-item>
-      </template>
       
       <!-- 客户基本信息 -->
       <el-form-item label="客户姓名" prop="customerName">
@@ -381,6 +291,14 @@ const timesServices = [
   '小型安装'
 ]
 
+// 下列服务保持原有逻辑，不做工作时间限制
+const unrestrictedServices = [
+  '月嫂服务',
+  '育儿嫂服务',
+  '生活照料',
+  '健康辅助'
+]
+
 // 获取当前选中服务的结算方式
 const currentBillingType = computed(() => {
   if (!form.serviceId) return null
@@ -403,20 +321,50 @@ const currentBillingType = computed(() => {
   return 'hourly'
 })
 
-// 服务信息显示
-const serviceInfo = computed(() => {
-  if (currentBillingType.value === 'hourly') {
-    if (form.totalDuration > 0) {
-      return `服务时长：${form.totalDuration} 小时（按小时结算）`
-    }
-    return '按小时结算（根据服务时长和定价结算）'
-  } else if (currentBillingType.value === 'daily') {
-    if (form.totalDays > 0) {
-      return `服务天数：${form.totalDays} 天（按天结算，不满一天按一天计算）`
-    }
-    return '按天结算（不满一天按一天计算）'
+// 当前选中的服务记录
+const currentService = computed(() => {
+  if (!form.serviceId) return null
+  return services.value.find(
+    (s) => s.id === form.serviceId || s.serviceId === form.serviceId
+  )
+})
+
+const currentServiceName = computed(() => {
+  const service = currentService.value
+  if (!service) return ''
+  return service.serviceName || service.name || service.service_name || ''
+})
+
+const requiresWorkingHoursLimit = computed(() => {
+  if (!currentServiceName.value) return false
+  return !unrestrictedServices.includes(currentServiceName.value)
+})
+
+const supportsCrossDayService = computed(() => {
+  if (!currentServiceName.value) return true
+  return unrestrictedServices.includes(currentServiceName.value)
+})
+
+const endDateTimeHintText = computed(() => {
+  if (supportsCrossDayService.value) {
+    return '结束时间可以选择其他日期，支持跨天服务'
   }
-  return ''
+  return '当前服务不支持跨天，请选择与开始日期同一天的结束时间'
+})
+
+// 当前服务的最低服务时长（小时），默认 1 小时
+const minServiceHours = computed(() => {
+  const svc = currentService.value
+  const estimated = svc?.estimatedDuration ?? svc?.estimated_duration
+  return estimated && estimated > 0 ? estimated : 1
+})
+
+// 服务信息显示（统一按小时结算）
+const serviceInfo = computed(() => {
+    if (form.totalDuration > 0) {
+    return `服务时长：${form.totalDuration} 小时（按小时结算，最低 ${minServiceHours.value} 小时起）`
+    }
+  return `按小时结算（最低 ${minServiceHours.value} 小时起，不足最低时长无法预约）`
 })
 
 // 动态验证规则
@@ -433,15 +381,9 @@ const rules = computed(() => {
   specialRequirements: [{ required: false, max: 500, message: '特殊要求不能超过500字', trigger: 'blur' }]
 }
   
-  // 根据结算方式添加不同的验证规则
-  if (currentBillingType.value === 'times') {
-    // 按次数结算：只需要日期和时间
-    baseRules.startTime = [{ required: true, message: '请选择服务时间', trigger: 'change' }]
-  } else {
-    // 按小时或按天结算：需要开始时间和结束时间
+  // 统一按小时计费：开始时间和结束时间都是必填
     baseRules.startTime = [{ required: true, message: '请选择开始时间', trigger: 'change' }]
     baseRules.endDateTime = [{ required: true, message: '请选择结束日期和时间', trigger: 'change' }]
-  }
   
   return baseRules
 })
@@ -528,15 +470,55 @@ const disabledEndDate = (time) => {
   return selectedDate.isBefore(startDate, 'day')
 }
 
-// 计算服务时长或天数
-const calculateDuration = () => {
-  if (currentBillingType.value === 'times') {
-    // 按次数结算，不需要计算
+const isWithinNormalWorkingHours = (timeText) => {
+  if (!timeText || typeof timeText !== 'string') return false
+  const [hourText, minuteText] = timeText.split(':')
+  const hour = Number(hourText)
+  const minute = Number(minuteText)
+  if (!Number.isInteger(hour) || !Number.isInteger(minute)) return false
+  const totalMinutes = hour * 60 + minute
+  return totalMinutes >= 6 * 60 && totalMinutes <= 21 * 60
+}
+
+const validateWorkingHours = () => {
+  if (!requiresWorkingHoursLimit.value) return true
+
+  const startTime = form.startTime
+  const endDateTime = form.endDateTime ? dayjs(form.endDateTime) : null
+  const endTime = endDateTime ? endDateTime.format('HH:mm') : ''
+
+  if (startTime && !isWithinNormalWorkingHours(startTime)) {
+    ElMessage.warning('选择的时间不在正常工作时间内，请重新选择')
+    form.startTime = ''
     form.totalDuration = 0
     form.totalDays = 0
-    return
+    return false
   }
-  
+
+  if (endTime && !isWithinNormalWorkingHours(endTime)) {
+    ElMessage.warning('选择的时间不在正常工作时间内，请重新选择')
+    form.endDateTime = ''
+    form.totalDuration = 0
+    form.totalDays = 0
+    return false
+  }
+
+  if (endDateTime && form.appointmentDate) {
+    const startDate = dayjs(form.appointmentDate)
+    if (!endDateTime.isSame(startDate, 'day')) {
+      ElMessage.warning('当前服务不支持跨天，请重新选择结束时间')
+      form.endDateTime = ''
+      form.totalDuration = 0
+      form.totalDays = 0
+      return false
+    }
+  }
+
+  return true
+}
+
+// 计算服务时长（统一按小时结算，向上取整）
+const calculateDuration = () => {
   if (!form.appointmentDate || !form.startTime || !form.endDateTime) {
     form.totalDuration = 0
     form.totalDays = 0
@@ -553,18 +535,27 @@ const calculateDuration = () => {
       return
     }
     
-  if (currentBillingType.value === 'daily') {
-    // 按天结算：计算天数，不满一天按一天计算
-    const days = endDateTime.diff(startDateTime, 'day', true)
-    // 如果天数小于1，按1天计算；否则向上取整
-    form.totalDays = days < 1 ? 1 : Math.ceil(days)
+  // 统一按小时结算：计算总分钟数并向上取整到整小时
+  const diffMinutes = endDateTime.diff(startDateTime, 'minute', true)
+  if (diffMinutes <= 0) {
     form.totalDuration = 0
-  } else {
-    // 按小时结算：计算小时数
-    const diff = endDateTime.diff(startDateTime, 'hour', true)
-    form.totalDuration = Math.round(diff * 100) / 100 // 保留两位小数
     form.totalDays = 0
+    return
   }
+
+  const roundedHours = Math.ceil(diffMinutes / 60) // 例如 4.5 小时 -> 5 小时
+  form.totalDuration = roundedHours
+  form.totalDays = 0
+}
+
+const handleStartTimeChange = () => {
+  if (!validateWorkingHours()) return
+  calculateDuration()
+}
+
+const handleEndDateTimeChange = () => {
+  if (!validateWorkingHours()) return
+  calculateDuration()
 }
 
 const loadServices = async () => {
@@ -642,7 +633,8 @@ const loadStaff = async () => {
   }
 }
 
-const handleServiceChange = () => {
+// 服务项目变更时：重置当前选择并重新加载可选服务人员
+const handleServiceChange = async () => {
   form.staffId = ''
   selectedStaffName.value = ''
   // 重置时间相关字段
@@ -651,7 +643,26 @@ const handleServiceChange = () => {
   form.endDateTime = ''
   form.totalDuration = 0
   form.totalDays = 0
-  loadStaff()
+  await loadStaff()
+}
+
+// 供父组件在“服务项目已经确定”的前提下，同步选中的服务人员
+const syncSelectedStaffFromParent = (staff) => {
+  if (!staff) {
+    form.staffId = ''
+    selectedStaffName.value = ''
+    return
+  }
+  const staffId = staff.staffId || staff.staff_id || staff.id
+  if (!staffId) return
+
+  form.staffId = staffId
+  selectedStaffName.value = staff.name || ''
+
+  // 清除校验错误提示（如果有）
+  if (formRef.value) {
+    formRef.value.clearValidate('staffId')
+  }
 }
 
 // 监听筛选条件变化
@@ -733,29 +744,28 @@ const submitForm = async () => {
     }
 
     if (valid) {
-      // 根据结算方式验证
-      if (currentBillingType.value === 'times') {
-        // 按次数结算，只需要日期和时间
-        if (!form.appointmentDate || !form.startTime) {
-          ElMessage.warning('请选择预约日期和服务时间')
-          return
-        }
-      } else {
-        // 按小时或按天结算，需要验证时间范围
+      // 统一按小时结算：必须选择完整的时间范围
         if (!form.appointmentDate || !form.startTime || !form.endDateTime) {
           ElMessage.warning('请选择完整的服务时间范围')
           return
         }
         
-        if (currentBillingType.value === 'hourly' && form.totalDuration <= 0) {
+      if (form.totalDuration <= 0) {
         ElMessage.warning('请选择有效的服务时间')
         return
         }
         
-        if (currentBillingType.value === 'daily' && form.totalDays <= 0) {
-          ElMessage.warning('请选择有效的服务时间')
+      // 校验最低服务时长：不足最低时长不允许预约
+      const minHours = minServiceHours.value
+      if (form.totalDuration < minHours) {
+        ElMessage.warning(
+          `该服务最低 ${minHours} 小时起，不足 ${minHours} 小时无法预约，请调整服务时间`
+        )
           return
-        }
+      }
+
+      if (!validateWorkingHours()) {
+        return
       }
       
       // 获取选中的服务人员名称
@@ -768,7 +778,8 @@ const submitForm = async () => {
       const submitData = {
         ...form,
         staffName,
-        billingType: currentBillingType.value,
+        // 后端已经统一按小时计费，这里固定传 hourly 以兼容旧字段
+        billingType: 'hourly',
         // 为了向后兼容，如果使用新的 endDateTime，也设置 endTime
         endTime: form.endDateTime ? form.endDateTime.split(' ')[1] : form.endTime
       }
@@ -800,7 +811,9 @@ defineExpose({
   form,
   selectedStaffName,
   loadServices,
-  handleServiceChange
+  handleServiceChange,
+  services,
+  syncSelectedStaffFromParent
 })
 </script>
 

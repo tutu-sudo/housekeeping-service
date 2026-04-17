@@ -173,6 +173,9 @@ const actions = {
       
       const token = data.token || data.accessToken || data.access_token || data.jwtToken || data.jwt
       
+      // 兼容后端两种实现：
+      // 1) 注册成功直接返回 token（注册后自动登录）
+      // 2) 注册成功不返回 token（需要用户回登录页手动登录）
       if (token) {
         commit('SET_TOKEN', token)
         
@@ -228,7 +231,9 @@ const actions = {
         commit('SET_USER_INFO', userInfo)
         return Promise.resolve(response)
       } else {
-        return Promise.reject(new Error('注册失败：后端未返回token'))
+        // 如果后端未返回 token，但 HTTP 请求成功且 code=200（已在拦截器处保证），
+        // 则认为注册成功，交由页面引导用户去登录。
+        return Promise.resolve(response)
       }
     } catch (error) {
       return Promise.reject(error)

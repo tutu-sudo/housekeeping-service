@@ -356,7 +356,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getAppointmentDetail, updateAppointmentStatus } from '@/api/appointments'
@@ -364,7 +364,15 @@ import * as reviewsApi from '@/api/reviews'
 import { getServiceDetail } from '@/api/services'
 import { getStaffDetail } from '@/api/staff'
 import { queryPaymentStatusByAppointment } from '@/api/payment'
-import { APPOINTMENT_STATUS_CONFIG, PAYMENT_STATUS_CONFIG } from '@/utils/constants'
+import { APPOINTMENT_STATUS_CONFIG } from '@/utils/constants'
+import {
+  normalizePaymentStatus,
+  isPaidPaymentStatus,
+  isUnpaidPaymentStatus,
+  getPaymentStatusType as getUnifiedPaymentStatusType,
+  getPaymentStatusText as getUnifiedPaymentStatusText
+} from '@/utils/payment'
+import { normalizeVisibleReview } from '@/utils/review'
 import Navigation from '@/components/common/Navigation.vue'
 import { CreditCard } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
@@ -386,15 +394,7 @@ const canPay = computed(() => {
   // 是否真正允许支付（包括是否超时等），仍由后端的 validatePayable 做最终校验。
   const rawStatus = appointment.value.status
   const status = typeof rawStatus === 'string' ? parseInt(rawStatus, 10) : rawStatus
-  const paymentStatus = appointment.value.paymentStatus
-
-  const isUnpaid =
-    paymentStatus === 0 ||
-    paymentStatus === 'unpaid' ||
-    paymentStatus === null ||
-    paymentStatus === undefined
-
-  return status === 1 && isUnpaid
+  return status === 1 && isUnpaidPaymentStatus(appointment.value.paymentStatus)
 })
 
 // 支付过期时间（创建订单后10分钟内需支付，可根据实际业务调整）
@@ -447,9 +447,7 @@ const canReview = computed(() => {
   if (status !== 3 && status !== 'completed') return false
   
   // 检查支付状态：必须是已支付（paymentStatus === 1）
-  const paymentStatus = appointment.value.paymentStatus
-  const isPaid = paymentStatus === 1 || paymentStatus === 'paid' || paymentStatus === 'success'
-  if (!isPaid) return false
+  if (!isPaidPaymentStatus(appointment.value.paymentStatus)) return false
   
   // 检查是否已经评价过
   if (appointment.value.reviewed === true || appointment.value.hasReview) return false
@@ -466,23 +464,11 @@ const getStatusText = (status) => {
 }
 
 const getPaymentStatusType = (paymentStatus) => {
-  // 处理 null、undefined 或数字字符串的情况
-  if (paymentStatus === null || paymentStatus === undefined) {
-    return 'info'
-  }
-  // 确保是数字类型
-  const status = typeof paymentStatus === 'string' ? parseInt(paymentStatus, 10) : paymentStatus
-  return PAYMENT_STATUS_CONFIG[status]?.type || 'info'
+  return getUnifiedPaymentStatusType(paymentStatus)
 }
 
 const getPaymentStatusText = (paymentStatus) => {
-  // 处理 null、undefined 或数字字符串的情况
-  if (paymentStatus === null || paymentStatus === undefined) {
-    return '未知'
-  }
-  // 确保是数字类型
-  const status = typeof paymentStatus === 'string' ? parseInt(paymentStatus, 10) : paymentStatus
-  return PAYMENT_STATUS_CONFIG[status]?.text || '未知'
+  return getUnifiedPaymentStatusText(paymentStatus)
 }
 
 const loadAppointment = async () => {
@@ -537,11 +523,7 @@ const loadAppointment = async () => {
       // 接单时间（用于计算支付倒计时）
       acceptTime: data.acceptTime || data.accept_time || null,
       // 处理支付状态（确保正确映射，支持多种字段名格式）
-      paymentStatus: data.paymentStatus !== undefined && data.paymentStatus !== null 
-        ? (typeof data.paymentStatus === 'string' ? parseInt(data.paymentStatus, 10) : data.paymentStatus)
-        : (data.payment_status !== undefined && data.payment_status !== null 
-          ? (typeof data.payment_status === 'string' ? parseInt(data.payment_status, 10) : data.payment_status)
-          : 0),
+      paymentStatus: normalizePaymentStatus(data),
       // 其他字段
       serviceAddress: data.serviceAddress || data.service_address || null,
       specialRequirements: data.specialRequirements || data.special_requirements || data.notes || null,
@@ -558,32 +540,21 @@ const loadAppointment = async () => {
     await loadReviewBundle(appointment.value.appointmentId)
     
     // 如果支付状态为"待支付"或"未知"，主动查询支付状态以触发后端自动同步
-    const paymentStatus = appointment.value.paymentStatus
-    // 检查是否为待支付状态：0、null、undefined、'unpaid'、'0' 或 NaN
-    const isUnpaid = paymentStatus === 0 || 
-                     paymentStatus === null || 
-                     paymentStatus === undefined || 
-                     paymentStatus === 'unpaid' || 
-                     paymentStatus === '0' ||
-                     (typeof paymentStatus === 'string' && paymentStatus.trim() === '') ||
-                     (typeof paymentStatus === 'number' && isNaN(paymentStatus))
+    const paymentStatus = normalizePaymentStatus(appointment.value)
+    const isUnpaid = isUnpaidPaymentStatus(paymentStatus)
     
     if (isUnpaid && appointment.value.appointmentId) {
       try {
         // 调用支付状态查询接口，触发后端自动同步支付宝状态
-        await queryPaymentStatusByAppointment(appointment.value.appointmentId)
+        await queryPaymentStatusByAppointment(appointment.value.appointmentId, { skipErrorHandler: true })
         // 同步后重新加载预约详情以获取最新状态
         const refreshResponse = await getAppointmentDetail(appointmentId)
         const refreshData = refreshResponse.data?.data || refreshResponse.data
         if (refreshData) {
           // 更新整个预约对象，确保所有字段都是最新的
-          const newPaymentStatus = refreshData.paymentStatus !== undefined && refreshData.paymentStatus !== null 
-            ? (typeof refreshData.paymentStatus === 'string' ? parseInt(refreshData.paymentStatus, 10) : refreshData.paymentStatus)
-            : (refreshData.payment_status !== undefined && refreshData.payment_status !== null 
-              ? (typeof refreshData.payment_status === 'string' ? parseInt(refreshData.payment_status, 10) : refreshData.payment_status)
-              : 0)
+          const newPaymentStatus = normalizePaymentStatus(refreshData)
           
-          const oldPaymentStatus = appointment.value.paymentStatus
+          const oldPaymentStatus = normalizePaymentStatus(appointment.value)
           appointment.value.paymentStatus = newPaymentStatus
           
           // 如果支付状态已更新为已支付，提示用户
@@ -664,17 +635,18 @@ const loadReviewBundle = async (appointmentId) => {
     return
   }
   try {
-    const res = await fn(appointmentId)
+    const res = await fn(appointmentId, { skipErrorHandler: true })
     const payload = res.data?.data || res.data || {}
     const normalize = (r) => {
-      if (!r) return null
+      const visible = normalizeVisibleReview(r)
+      if (!visible) return null
       return {
-        overallRating: r.overallRating ?? r.rating ?? r.overall_rating ?? null,
-        serviceAttitudeRating: r.serviceAttitudeRating ?? r.service_attitude_rating ?? null,
-        professionalAbilityRating: r.professionalAbilityRating ?? r.professional_ability_rating ?? null,
-        serviceQualityRating: r.serviceQualityRating ?? r.service_quality_rating ?? null,
-        reviewContent: r.reviewContent ?? r.content ?? r.review_content ?? '',
-        reviewTime: r.createTime ?? r.createdAt ?? r.created_at ?? r.reviewTime ?? ''
+        overallRating: visible.overallRating ?? visible.rating ?? visible.overall_rating ?? null,
+        serviceAttitudeRating: visible.serviceAttitudeRating ?? visible.service_attitude_rating ?? null,
+        professionalAbilityRating: visible.professionalAbilityRating ?? visible.professional_ability_rating ?? null,
+        serviceQualityRating: visible.serviceQualityRating ?? visible.service_quality_rating ?? null,
+        reviewContent: visible.reviewContent ?? visible.content ?? visible.review_content ?? '',
+        reviewTime: visible.createTime ?? visible.createdAt ?? visible.created_at ?? visible.reviewTime ?? ''
       }
     }
     customerReviewBlock.value = normalize(payload.customerReview)
@@ -729,7 +701,7 @@ const startStatusPolling = () => {
     } catch (error) {
       console.error('轮询状态失败:', error)
     }
-  }, 3000) // 每3秒轮询一次
+  }, 15000) // 每15秒轮询一次，减少页面刷新频率
 }
 
 const stopStatusPolling = () => {
@@ -787,6 +759,45 @@ const viewReview = () => {
 onMounted(() => {
   loadAppointment()
 })
+
+// 支付成功回跳后：进入详情页立刻刷新一次（避免等轮询/缓存）
+watch(
+  () => route.query,
+  async (q) => {
+    const needRefresh =
+      q?.refresh === 'true' ||
+      q?.from === 'payment-success' ||
+      q?.from === 'alipay-return'
+
+    if (!needRefresh) return
+
+    // 先触发一次支付状态同步，再拉详情
+    const id = route.params.id
+    if (id) {
+      try {
+        // 短轮询确认：避免回跳后瞬间仍读到旧状态
+        for (let i = 0; i < 8; i++) {
+          try {
+            await queryPaymentStatusByAppointment(id, { skipErrorHandler: true })
+          } catch (e) {
+            // ignore
+          }
+          // 重新拉取一次详情，如果已变更则提前结束
+          await loadAppointment()
+          const ps = normalizePaymentStatus(appointment.value)
+          if (ps === 1) break
+          await new Promise((r) => setTimeout(r, 700))
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    // 清掉 query，避免重复触发
+    router.replace({ query: {} })
+  },
+  { immediate: true }
+)
 
 onUnmounted(() => {
   stopStatusPolling()

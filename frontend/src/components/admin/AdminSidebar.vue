@@ -39,25 +39,30 @@
         <el-menu-item index="/admin/verification">服务人员审核</el-menu-item>
         <el-menu-item index="/admin/staff/certificates">资质信息管理</el-menu-item>
         <el-menu-item index="/admin/staff/status">人员状态监控</el-menu-item>
+        <el-menu-item index="/admin/users">用户管理监控</el-menu-item>
       </el-sub-menu>
-
+      
       <el-sub-menu index="reviews">
         <template #title>
-          <el-icon><ChatLineRound /></el-icon>
-          <span>评价管理</span>
+        <el-icon><ChatLineRound /></el-icon>
+        <span>评价管理</span>
         </template>
         <el-menu-item index="/admin/reviews?reviewerRole=1">顾客评价</el-menu-item>
         <el-menu-item index="/admin/reviews?reviewerRole=2">员工自评</el-menu-item>
       </el-sub-menu>
       
+      <el-sub-menu index="statistics">
+        <template #title>
+        <el-icon><DataAnalysis /></el-icon>
+        <span>数据统计</span>
+        </template>
+        <el-menu-item index="/admin/statistics?analysisType=data">数据统计分析</el-menu-item>
+        <el-menu-item index="/admin/statistics?analysisType=service">服务统计分析</el-menu-item>
+      </el-sub-menu>
+      
       <el-menu-item index="/admin/companies">
         <el-icon><OfficeBuilding /></el-icon>
         <span>公司信息</span>
-      </el-menu-item>
-      
-      <el-menu-item index="/admin/statistics">
-        <el-icon><DataAnalysis /></el-icon>
-        <span>数据统计</span>
       </el-menu-item>
     </el-menu>
   </el-aside>
@@ -90,6 +95,7 @@ const activeMenu = computed(() => {
   if (path.startsWith('/admin/verification')) return '/admin/verification'
   if (path.startsWith('/admin/staff/certificates')) return '/admin/staff/certificates'
   if (path.startsWith('/admin/staff/status')) return '/admin/staff/status'
+  if (path.startsWith('/admin/users')) return '/admin/users'
   if (path.startsWith('/admin/reviews')) {
     // 评价管理需要根据 query 高亮不同子菜单
     const reviewerRole = String(route.query?.reviewerRole || '')
@@ -98,7 +104,11 @@ const activeMenu = computed(() => {
     return '/admin/reviews?reviewerRole=1'
   }
   if (path.startsWith('/admin/companies')) return '/admin/companies'
-  if (path.startsWith('/admin/statistics')) return '/admin/statistics'
+  if (path.startsWith('/admin/statistics')) {
+    const type = String(route.query?.analysisType || '')
+    if (type === 'service') return '/admin/statistics?analysisType=service'
+    return '/admin/statistics?analysisType=data'
+  }
   return path
 })
 </script>

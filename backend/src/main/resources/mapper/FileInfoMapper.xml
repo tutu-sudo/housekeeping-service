@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="housekeeping.housekeepingnow.mapper.FileInfoMapper">
+
+    <resultMap id="BaseResultMap" type="housekeeping.housekeepingnow.entity.FileInfo">
+        <id column="file_id" property="fileId"/>
+        <result column="file_name" property="fileName"/>
+        <result column="original_name" property="originalName"/>
+        <result column="file_path" property="filePath"/>
+        <result column="file_url" property="fileUrl"/>
+        <result column="file_type" property="fileType"/>
+        <result column="file_size" property="fileSize"/>
+        <result column="file_category" property="fileCategory"/>
+        <result column="related_id" property="relatedId"/>
+        <result column="upload_user_id" property="uploadUserId"/>
+        <result column="create_time" property="createTime"/>
+    </resultMap>
+
+    <select id="selectById" resultMap="BaseResultMap">
+        SELECT file_id, file_name, original_name, file_path, file_url,
+               file_type, file_size, file_category, related_id,
+               upload_user_id, create_time
+        FROM file_info
+        WHERE file_id = #{fileId}
+    </select>
+
+    <select id="selectByCategoryAndRelatedId" resultMap="BaseResultMap">
+        SELECT file_id, file_name, original_name, file_path, file_url,
+               file_type, file_size, file_category, related_id,
+               upload_user_id, create_time
+        FROM file_info
+        WHERE file_category = #{fileCategory}
+          <if test="relatedId != null">
+              AND related_id = #{relatedId}
+          </if>
+        ORDER BY create_time DESC
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="fileId">
+        INSERT INTO file_info (file_name, original_name, file_path, file_url,
+                               file_type, file_size, file_category, related_id,
+                               upload_user_id)
+        VALUES (#{fileName}, #{originalName}, #{filePath}, #{fileUrl},
+                #{fileType}, #{fileSize}, #{fileCategory}, #{relatedId},
+                #{uploadUserId})
+    </insert>
+
+    <delete id="deleteById">
+        DELETE FROM file_info WHERE file_id = #{fileId}
+    </delete>
+
+</mapper>
+
+

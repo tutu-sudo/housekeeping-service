@@ -22,6 +22,7 @@ const ServiceContentManagementView = () => import('@/views/admin/ServiceContentM
 const ScheduleManagementView = () => import('@/views/admin/ScheduleManagementView.vue')
 const StaffCertificateAuditView = () => import('@/views/admin/StaffCertificateAuditView.vue')
 const StaffStatusMonitorView = () => import('@/views/admin/StaffStatusMonitorView.vue')
+const AdminUserManagementView = () => import('@/views/admin/AdminUserManagementView.vue')
 const ReviewManagementView = () => import('@/views/admin/ReviewManagementView.vue')
 const PaymentManagementView = () => import('@/views/admin/PaymentManagementView.vue')
 const CompanyManagementView = () => import('@/views/admin/CompanyManagementView.vue')
@@ -203,6 +204,12 @@ const routes = [
     path: '/admin/staff/status',
     name: 'StaffStatusMonitor',
     component: StaffStatusMonitorView,
+    meta: { requiresAuth: true, role: ['admin'] }
+  },
+  {
+    path: '/admin/users',
+    name: 'AdminUserManagement',
+    component: AdminUserManagementView,
     meta: { requiresAuth: true, role: ['admin'] }
   },
   {
